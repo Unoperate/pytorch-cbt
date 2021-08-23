@@ -7,7 +7,13 @@
 #include <iostream>
 #include <vector>
 
+
+void foo() {
+	google::cloud::bigtable::DefaultRPCRetryPolicy(google::cloud::bigtable::internal::kBigtableInstanceAdminLimits);
+}
+
 std::vector<at::Tensor> test_func(torch::Tensor input, int x) {
+  foo();
   return {input * x, input};
 }
 
@@ -21,9 +27,6 @@ std::string get_data(
   return x;
 }
 
-void foo() {
-	google::cloud::bigtable::DefaultRPCRetryPolicy(google::cloud::bigtable::internal::kBigtableInstanceAdminLimits);
-}
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("test_func", &test_func, "test function");
