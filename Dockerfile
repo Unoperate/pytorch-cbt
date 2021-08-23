@@ -176,6 +176,7 @@ RUN curl -sSL \
   cd google-cloud-cpp-1.30.1 && \
   cmake -GNinja \
   -DBUILD_TESTING=OFF \
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
   -DGOOGLE_CLOUD_CPP_ENABLE_EXAMPLES=OFF \
   -DCMAKE_INSTALL_PREFIX=/usr \
   -S . -B cmake-out && \
