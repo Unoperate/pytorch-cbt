@@ -1,5 +1,5 @@
 import torch
-import dataset_cpp.code as code
+import pbt_C as code
 
 def bar(x):
     print("example function in python calling c++ code")
