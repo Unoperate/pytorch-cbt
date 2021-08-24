@@ -1,6 +1,6 @@
 import torch
 
-from pbt_C import test_func, get_data
-from pytorch_bigtable.example import bar
+from pbt_C import get_data
+from pytorch_bigtable.example import get_data_py
 
-__all__ = ['test_func', 'get_data', 'bar']
+__all__ = ['get_data', 'get_data_py']

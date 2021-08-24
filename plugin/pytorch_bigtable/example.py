@@ -1,6 +1,5 @@
-import torch
 import pbt_C as code
 
-def bar(x):
+def get_data_py(project_id, instance_id, table_id):
     print("example function in python calling c++ code")
-    return code.test_func(torch.Tensor([1,2,3]), x)
+    code.get_data(project_id, instance_id, table_id)

@@ -1,34 +1,39 @@
 #include <torch/extension.h>
+#include <torch/torch.h>
 
 #include "google/cloud/bigtable/table.h"
 #include "google/cloud/bigtable/table_admin.h"
-#include "google/cloud/bigtable/rpc_retry_policy.h"
 
 #include <iostream>
 #include <vector>
 
+void get_data(std::string const project_id, std::string const instance_id, std::string const table_id)
+{
+  namespace cbt = ::google::cloud::bigtable;
 
-void foo() {
-	google::cloud::bigtable::DefaultRPCRetryPolicy(google::cloud::bigtable::internal::kBigtableInstanceAdminLimits);
+  cbt::Table table(cbt::CreateDefaultDataClient(project_id, instance_id,
+                                                cbt::ClientOptions()),
+                   table_id);
+
+  google::cloud::bigtable::v1::RowReader reader1 = table.ReadRows(
+      cbt::RowRange::InfiniteRange(), cbt::Filter::PassAllFilter());
+
+  for (auto const &row : reader1)
+  {
+    if (!row)
+      throw std::runtime_error(row.status().message());
+    std::cout << "row: " << row->row_key() << ":\n";
+    for (auto const &cell : row->cells())
+    {
+      std::cout << "cell:\n";
+      std::cout << cell.family_name() << ":" << cell.column_qualifier() << ":"
+                << cell.value() << "       @ " << cell.timestamp().count()
+                << "us\n";
+    }
+  }
 }
 
-std::vector<at::Tensor> test_func(torch::Tensor input, int x) {
-  foo();
-  return {input * x, input};
-}
-
-std::string get_data(
-    std::string project_id,
-    std::string instance_id,
-    std::string table_id,
-    std::string column_family,
-    std::string column_name) {
-  std::string x = project_id + instance_id + "hello_world";
-  return x;
-}
-
-
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("test_func", &test_func, "test function");
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
+{
   m.def("get_data", &get_data, "get data from BigTable");
 }
