@@ -9,7 +9,6 @@ setup(name='pytorch_bigtable',
       ext_modules=[cpp_extension.CppExtension(
             'pbt_C', 
             ['csrc/dataset.cpp'], 
-            include_dirs=['/usr/local/include/'],
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,
             )],

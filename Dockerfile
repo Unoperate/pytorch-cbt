@@ -58,6 +58,10 @@ RUN apt-get update && \
         libssl-dev m4 make pkg-config tar wget zlib1g-dev
 # ```
 
+# *Note*: Everything we use has to be ABI compatible. Because pytorch was compiled
+# with the different ABI version than everything else, we need to recompile all the
+# libraries we use and their dependencies. 
+
 # #### re2
 
 # We need a re2 library compiled with D_GLIBCXX_USE_CXX11_ABI=0 flag
