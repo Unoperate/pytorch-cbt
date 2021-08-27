@@ -58,6 +58,32 @@ RUN apt-get update && \
         libssl-dev m4 make pkg-config tar wget zlib1g-dev
 # ```
 
+# *Note*: Everything we use has to be ABI compatible. Because pytorch was compiled
+# with the different ABI version than everything else, we need to recompile all the
+# libraries we use and their dependencies. 
+
+# #### re2
+
+# We need a re2 library compiled with D_GLIBCXX_USE_CXX11_ABI=0 flag
+
+# ```bash
+WORKDIR /var/tmp/build/re2
+RUN curl -sSL https://github.com/google/re2/archive/refs/tags/2021-08-01.tar.gz | \
+    tar -xzf - --strip-components=1 && \
+    cmake \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=NO \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCRC32C_BUILD_TESTS=OFF \
+        -DCRC32C_BUILD_BENCHMARKS=OFF \
+        -DCRC32C_USE_GLOG=OFF \
+        -DCMAKE_CXX_FLAGS='-D_GLIBCXX_USE_CXX11_ABI=0' \
+        -H. -Bcmake-out && \
+    cmake --build cmake-out -- -j ${NCPU:-4} && \
+    cmake --build cmake-out --target install -- -j ${NCPU:-4} && \
+    ldconfig
+# ```
+
 # #### Abseil
 
 # We need a recent version of Abseil.
@@ -67,10 +93,12 @@ WORKDIR /var/tmp/build/abseil-cpp
 RUN curl -sSL https://github.com/abseil/abseil-cpp/archive/20210324.2.tar.gz | \
     tar -xzf - --strip-components=1 && \
     sed -i 's/^#define ABSL_OPTION_USE_\(.*\) 2/#define ABSL_OPTION_USE_\1 0/' "absl/base/options.h" && \
+    CXXFLAGS='-D_GLIBCXX_USE_CXX11_ABI=0' \
     cmake \
       -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_TESTING=OFF \
-      -DBUILD_SHARED_LIBS=yes \
+      -DBUILD_SHARED_LIBS=no \
+      -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
       -DCMAKE_CXX_STANDARD=11 \
       -H. -Bcmake-out && \
     cmake --build cmake-out -- -j ${NCPU:-4} && \
@@ -89,8 +117,10 @@ RUN curl -sSL https://github.com/protocolbuffers/protobuf/archive/v3.17.3.tar.gz
     tar -xzf - --strip-components=1 && \
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_SHARED_LIBS=yes \
+        -DBUILD_SHARED_LIBS=no \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -Dprotobuf_BUILD_TESTS=OFF \
+        -DCMAKE_CXX_FLAGS='-D_GLIBCXX_USE_CXX11_ABI=0' \
         -Hcmake -Bcmake-out && \
     cmake --build cmake-out -- -j ${NCPU:-4} && \
     cmake --build cmake-out --target install -- -j ${NCPU:-4} && \
@@ -116,6 +146,9 @@ RUN curl -sSL https://github.com/grpc/grpc/archive/v1.39.0.tar.gz | \
         -DgRPC_RE2_PROVIDER=package \
         -DgRPC_SSL_PROVIDER=package \
         -DgRPC_ZLIB_PROVIDER=package \
+        -DBUILD_SHARED_LIBS=no \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_FLAGS='-D_GLIBCXX_USE_CXX11_ABI=0' \
         -H. -Bcmake-out && \
     cmake --build cmake-out -- -j ${NCPU:-4} && \
     cmake --build cmake-out --target install -- -j ${NCPU:-4} && \
@@ -133,10 +166,12 @@ RUN curl -sSL https://github.com/google/crc32c/archive/1.1.0.tar.gz | \
     tar -xzf - --strip-components=1 && \
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_SHARED_LIBS=yes \
+        -DBUILD_SHARED_LIBS=NO \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DCRC32C_BUILD_TESTS=OFF \
         -DCRC32C_BUILD_BENCHMARKS=OFF \
         -DCRC32C_USE_GLOG=OFF \
+        -DCMAKE_CXX_FLAGS='-D_GLIBCXX_USE_CXX11_ABI=0' \
         -H. -Bcmake-out && \
     cmake --build cmake-out -- -j ${NCPU:-4} && \
     cmake --build cmake-out --target install -- -j ${NCPU:-4} && \
@@ -156,7 +191,8 @@ RUN curl -sSL https://github.com/nlohmann/json/archive/v3.9.1.tar.gz | \
     tar -xzf - --strip-components=1 && \
     cmake \
       -DCMAKE_BUILD_TYPE=Release \
-      -DBUILD_SHARED_LIBS=yes \
+      -DBUILD_SHARED_LIBS=no \
+      -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
       -DBUILD_TESTING=OFF \
       -H. -Bcmake-out/nlohmann/json && \
     cmake --build cmake-out/nlohmann/json --target install -- -j ${NCPU:-4} && \
@@ -176,8 +212,11 @@ RUN curl -sSL \
   cd google-cloud-cpp-1.30.1 && \
   cmake -GNinja \
   -DBUILD_TESTING=OFF \
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
   -DGOOGLE_CLOUD_CPP_ENABLE_EXAMPLES=OFF \
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
   -DCMAKE_INSTALL_PREFIX=/usr \
+  -DCMAKE_CXX_FLAGS='-D_GLIBCXX_USE_CXX11_ABI=0' \
   -S . -B cmake-out && \
   cmake --build cmake-out && \
   cmake --install cmake-out --component google_cloud_cpp_development
