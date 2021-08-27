@@ -245,7 +245,7 @@ class BigtableTable:
         if not isinstance(versions, int) or versions < 1:
             raise ValueError("`versions` must be a positive integer")
 
-        return _CloudBigtableDataset(self._client,
+        return _BigtableDataset(self._client,
                                      self._samples,
                                      selected_columns,
                                      start_key,
@@ -254,7 +254,7 @@ class BigtableTable:
                                      versions)
 
 
-class _CloudBigtableDataset(torch.utils.data.IterableDataset):
+class _BigtableDataset(torch.utils.data.IterableDataset):
 
     def __init__(self,
                  client,
@@ -264,7 +264,7 @@ class _CloudBigtableDataset(torch.utils.data.IterableDataset):
                  end_key,
                  row_key_prefix,
                  versions) -> None:
-        super(_CloudBigtableDataset).__init__()
+        super(_BigtableDataset).__init__()
         self._samples = samples
         self._selected_columns = selected_columns
         self._start_key = start_key
