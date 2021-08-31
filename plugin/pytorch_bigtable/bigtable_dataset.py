@@ -61,9 +61,10 @@ class BigtableTable:
     """
 
     def __init__(self,
+                 client,
                  table_id,
-                 app_profile_id,
-                 client) -> None:
+                 app_profile_id=None,
+                 ) -> None:
         """
         Args:
             table_id: The ID of the table.
@@ -105,7 +106,6 @@ class BigtableTable:
                 "column_family_a:column_name_b",
                 ...]
             row_keys: list of row_keys that should be used for the rows in the tensor.
-                This is only needed when row_key_prefix and offset are not specified.
 
         """
 
