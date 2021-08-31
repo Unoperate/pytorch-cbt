@@ -40,6 +40,13 @@ EMULATOR_LOG=$(mktemp)
 "$EMULATOR_PATH" -host 127.0.0.1 -port 0 >"$EMULATOR_LOG" &
 EMULATOR_PID=$!
 
+log "Running clang-tidy"
+clang-tidy-10 $(find -name \*.cpp -o -name \*.h) \
+  -- \
+  -I /usr/local/lib/python3.8/dist-packages/torch/include \
+  -I /usr/local/lib/python3.8/dist-packages/torch/include/torch/csrc/api/include \
+  -I /usr/include/python3.8
+
 # Wait until the CBT emulator spits out a line with:
 # "Cloud Bigtable emulator running on 127.0.0.1:12345"
 BIGTABLE_EMULATOR_HOST=$(
