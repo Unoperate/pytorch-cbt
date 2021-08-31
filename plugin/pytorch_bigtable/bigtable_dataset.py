@@ -1,7 +1,7 @@
 from _typeshed import Self
 import torch
 import math
-import cbt_C
+import pbt_C
 
 
 class BigtableClient:
@@ -86,7 +86,7 @@ class BigtableTable:
         self._instance_id = instance_id
         self._table_id = table_id
         self._application_profile_id = application_profile_id
-        self._samples = cbt_C.io_big_table_sample_row_key(self._project_id,
+        self._samples = pbt_C.io_big_table_sample_row_key(self._project_id,
                                                           self._instance_id,
                                                           self._table_id,
                                                           self._application_profile_id)
@@ -159,7 +159,11 @@ class BigtableTable:
                 if not isinstance(row_key, str):
                     raise ValueError(f"`row_keys[{i}]` must be a string")
 
-        cbt_C.io_big_table_write(tensor,
+        pbt_C.io_big_table_write(self._project_id,
+                                 self._instance_id,
+                                 self._table_id,
+                                 self._application_profile_id,
+                                 tensor,
                                  columns,
                                  row_key_prefix,
                                  offset,
@@ -246,17 +250,25 @@ class BigtableTable:
             raise ValueError("`versions` must be a positive integer")
 
         return _BigtableDataset(self._client,
-                                     self._samples,
-                                     selected_columns,
-                                     start_key,
-                                     end_key,
-                                     row_key_prefix,
-                                     versions)
+                                self._project_id,
+                                self._instance_id,
+                                self._table_id,
+                                self._application_profile_id,
+                                self._samples,
+                                selected_columns,
+                                start_key,
+                                end_key,
+                                row_key_prefix,
+                                versions)
 
 
 class _BigtableDataset(torch.utils.data.IterableDataset):
 
     def __init__(self,
+                 project_id,
+                 instance_id,
+                 table_id,
+                 application_profile_id,
                  client,
                  samples,
                  selected_columns,
@@ -265,13 +277,18 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
                  row_key_prefix,
                  versions) -> None:
         super(_BigtableDataset).__init__()
+
+        self._client = client
+        self._project_id = project_id
+        self._instance_id = instance_id
+        self._table_id = table_id
+        self._application_profile_id = application_profile_id
         self._samples = samples
         self._selected_columns = selected_columns
         self._start_key = start_key
         self._end_key = end_key
         self._row_key_prefix = row_key_prefix
         self._versions = versions
-        self._client = client
 
     def __iter__(self):
         """
@@ -289,7 +306,11 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
         num_workers = worker_info.num_workers if worker_info is not None else 1
         worker_id = worker_info.worker_id if worker_info is not None else 0
 
-        return cbt_C.io_big_table_iterator(self._samples,
+        return pbt_C.io_big_table_iterator(self._project_id,
+                                           self._instance_id,
+                                           self._table_id,
+                                           self._application_profile_id,
+                                           self._samples,
                                            self._selected_columns,
                                            self._start_key,
                                            self._end_key,
