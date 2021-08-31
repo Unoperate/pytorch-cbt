@@ -7,8 +7,8 @@
 #include <iostream>
 #include <vector>
 
-void get_data(std::string const project_id, std::string const instance_id, std::string const table_id)
-{
+void get_data(std::string const& project_id, std::string const& instance_id,
+              std::string const& table_id) {
   namespace cbt = ::google::cloud::bigtable;
 
   cbt::Table table(cbt::CreateDefaultDataClient(project_id, instance_id,
