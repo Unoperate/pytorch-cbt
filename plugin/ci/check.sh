@@ -24,8 +24,17 @@ fail() {
 
 trap onExit exit
 
+log "Testing if the cc sources are properly formatted."
+
+find \( -name \*.cpp -o -name \*.h \) -print0 \
+  | xargs -0 clang-format-10 --dry-run --Werror
+
+log "Compiling and installing the project"
+
 cd "$PROJECT_DIR"
 python3 setup.py install
+
+log "Installing the project"
 
 EMULATOR_LOG=$(mktemp)
 "$EMULATOR_PATH" -host 127.0.0.1 -port 0 >"$EMULATOR_LOG" &
@@ -40,10 +49,12 @@ BIGTABLE_EMULATOR_HOST=$(
   | grep '^[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+:[0-9]\+$'
   )
 
-[ -n "$BIGTABLE_EMULATOR_HOST" ] || fail "Failed to find the emulator port number"
+[ -n "$BIGTABLE_EMULATOR_HOST" ] || \
+  fail "Failed to find the emulator port number"
 export BIGTABLE_EMULATOR_HOST
 
-log "Cloud Bigtable emulator is running on port $BIGTABLE_EMULATOR_HOST"
+log "Cloud Bigtable emulator is running on port $BIGTABLE_EMULATOR_HOST."
+log "Testing the project."
 
 # Create a dumy table.
 cbt -project fake_project -instance fake_instance createtable fake_table
