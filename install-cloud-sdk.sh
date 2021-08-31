@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This file is "borrowed" from the
+# https://github.com/googleapis/google-cloud-cpp project.
+
 set -eu
 
 readonly GOOGLE_CLOUD_CPP_CLOUD_SDK_VERSION="348.0.0"
