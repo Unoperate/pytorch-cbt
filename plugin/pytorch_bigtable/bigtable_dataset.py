@@ -49,6 +49,12 @@ class BigtableClient:
         self.instance_id = instance_id
 
     def get_table(self, table_id, app_profile_id=None):
+        """Creates an instance of BigtableTable
+        
+        Args:
+            table_id: the ID of the table.
+            app_profile_id: The assigned application profile ID. Defaults to None.
+        """
         return BigtableTable(table_id, app_profile_id, self)
 
 
@@ -77,7 +83,7 @@ class BigtableTable:
             raise ValueError("`table_id` must be a string")
 
         # app_profile_id
-        if not isinstance(app_profile_id, str):
+        if app_profile_id and not isinstance(app_profile_id, str):
             raise ValueError("`app_profile_id` must be a string")
 
         # client
