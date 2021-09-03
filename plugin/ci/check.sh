@@ -69,6 +69,7 @@ echo project = fake_project > ~/.cbtrc
 echo instance = fake_instance >> ~/.cbtrc
 # Create a dumy table.
 cbt createtable fake_table
+cbt createfamily fake_table cf1
 # Read something from it.
 LD_LIBRARY_PATH=/usr/local/lib/python3.8/dist-packages/torch/lib \
   python3 \
