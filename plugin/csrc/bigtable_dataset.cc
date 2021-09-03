@@ -1,6 +1,7 @@
 #include "google/cloud/bigtable/table.h"
 #include "google/cloud/bigtable/table_admin.h"
 #include <pybind11/pybind11.h>
+#include <rpc/rpc.h> /* xdr is a sub-library of rpc */
 #include <torch/extension.h>
 #include <torch/torch.h>
 #include <optional>
@@ -9,21 +10,33 @@ namespace py = pybind11;
 namespace cbt = ::google::cloud::bigtable;
 
 namespace {
-std::string ValueToBytes(float v) {
-  // TODO(kboroszko): make it work like HBase
-  return std::to_string(v);
+
+std::string FloatToBytes(float v) {
+  char buffer[sizeof(v)];
+  XDR xdrs;
+  xdrmem_create(&xdrs, buffer, sizeof(v), XDR_ENCODE);
+  if (!xdr_float(&xdrs, &v)) {
+    throw std::runtime_error("Error writing float to byte array.");
+  }
+  std::string s(buffer, sizeof(v));
+  return s;
 }
 
-float BytesToValue(std::string const& s) {
-  // TODO(kboroszko): make it work like HBase
-  return std::stof(s);
+float BytesToFloat(std::string s) {
+  float v;
+  XDR xdrs;
+  xdrmem_create(&xdrs, const_cast<char*>(s.data()), sizeof(v), XDR_DECODE);
+  if (!xdr_float(&xdrs, &v)) {
+    throw std::runtime_error("Error reading float from byte array.");
+  }
+  return v;
 }
 
 void putCellValueInTensor(torch::Tensor& tensor, int index, torch::Dtype dtype,
                           cbt::Cell const& cell) {
   switch (dtype) {
     case torch::kFloat32:
-      tensor.index_put_({index}, BytesToValue(cell.value()));
+      tensor.index_put_({index}, BytesToFloat(cell.value()));
       break;
 
     default:
@@ -114,7 +127,7 @@ void Write(py::object const& client, std::string const& tableId,
                                                   col_name_full.length());
       google::cloud::Status status = table.Apply(cbt::SingleRowMutation(
           row_key, cbt::SetCell(std::move(col_family), std::move(col_name),
-                                ValueToBytes(*ptr))));
+                                FloatToBytes(*ptr))));
       ++ptr;
       if (!status.ok()) throw std::runtime_error(status.message());
     }
