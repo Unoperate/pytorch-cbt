@@ -26,7 +26,7 @@ trap onExit exit
 
 log "Testing if the cc sources are properly formatted."
 
-find \( -name \*.cpp -o -name \*.h \) -print0 \
+find \( -name \*.cc -o -name \*.h \) -print0 \
   | xargs -0 clang-format-10 --dry-run --Werror
 
 log "Compiling and installing the project"
@@ -41,8 +41,9 @@ EMULATOR_LOG=$(mktemp)
 EMULATOR_PID=$!
 
 log "Running clang-tidy"
-clang-tidy-10 $(find -name \*.cpp -o -name \*.h) \
+clang-tidy-10 $(find -name \*.cc -o -name \*.h) \
   -- \
+  -std=c++17 \
   -I /usr/local/lib/python3.8/dist-packages/torch/include \
   -I /usr/local/lib/python3.8/dist-packages/torch/include/torch/csrc/api/include \
   -I /usr/include/python3.8
