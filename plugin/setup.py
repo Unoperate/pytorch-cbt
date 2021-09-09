@@ -14,4 +14,6 @@ setup(name='pytorch_bigtable',
             )],
       package_dir={"": "."},
       packages=['pytorch_bigtable'],
-      cmdclass={'build_ext': cpp_extension.BuildExtension})
+      cmdclass={'build_ext': cpp_extension.BuildExtension},
+      test_suite='nose.collector',
+      tests_require=['nose'])

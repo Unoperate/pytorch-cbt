@@ -213,6 +213,7 @@ RUN curl -sSL \
 
 # pyTorch
 RUN pip3 install \
+      nose==1.3.7 \
       torch==1.9.0+cpu \
       torchvision==0.10.0+cpu \
       torchaudio==0.9.0 \
