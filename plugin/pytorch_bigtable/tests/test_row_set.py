@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from pytorch_bigtable.row_set import RowRange,RowSet
+from pytorch_bigtable import RowRange,RowSet
 
 class RowRangeTest(TestCase):
     def test_infinite(self):
