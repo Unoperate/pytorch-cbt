@@ -1,8 +1,5 @@
-from _typeshed import Self
 import torch
-import math
 import pbt_C
-
 
 class BigtableClient:
     """CloudBigtableClient is the main entrypoint for
