@@ -1,6 +1,6 @@
 from unittest import TestCase
-from pytorch_bigtable import row_set
-from pytorch_bigtable import row_range
+from pytorch_bigtable import row_set,row_range
+
 
 class RowRangeTest(TestCase):
   def test_infinite(self):
@@ -62,13 +62,13 @@ class TestRowSet(TestCase):
 
   def test_append_row(self):
     r_set = row_set.empty()
-    r_set.append_row("row1")
+    r_set.append("row1")
     expected = 'row_keys: "row1"\n'
     self.assertEqual(expected, repr(r_set))
 
   def test_append_row_range(self):
     r_set = row_set.empty()
-    r_set.append_range(row_range.closed_range("row1", "row2"))
+    r_set.append(row_range.closed_range("row1", "row2"))
     expected = (
         'row_ranges {\n' +
         '  start_key_closed: "row1"\n' +

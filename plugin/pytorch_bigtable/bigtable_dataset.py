@@ -1,5 +1,20 @@
 import torch
 import pbt_C
+from typing import List
+
+class BigtableCredentials:
+    pass
+
+class ServiceAccountJson(BigtableCredentials):
+    """A class instructing CloudBigtableClient to use a service account."""
+
+    def __init__(self, json_text : str):
+        self._json_text = json_text
+
+    @classmethod
+    def read_from_file(cls, path : str):
+        with open(path, 'r') as f:
+            return cls(f.read())
 
 class BigtableClient:
     """CloudBigtableClient is the main entrypoint for
@@ -10,95 +25,70 @@ class BigtableClient:
     """
 
     def __init__(self,
-                 project_id,
-                 instance_id,
-                 credentials_path=None,
-                 endpoint=None,
-                 ) -> None:
+            project_id : str,
+            instance_id : str,
+            credentials : BigtableCredentials=None,
+            endpoint : str=None,
+            ) -> None:
         """Creates a BigtableClient to start.
 
         Args:
-            credentails_path: path to credentials json. If not
-            specified, uses the defualt credentials from the environment
-            variable.
-            endpoint: if not specified, uses the default bigtable endpoint
-            project_id: The assigned project ID of the project.
-            instance_id: The assigned instance ID.
+            project_id (str): The assigned project ID of the project.
+            instance_id (str): The assigned instance ID.
+            credentials (BigtableCredentials): An object used for obtaining
+                credentials to authenticate to Cloud Bigtable. If set to None,
+                the default credentials will be used (i.e. machine service
+                account in GCS or GOOGLE_APPLICATION_CREDENTIALS environment
+                variable). Consult google-cloud-cpp project for more
+                information.
+            endpoint (str): A custom URL, where Cloud Bigtable is available. If
+                set to None, the default will be used.
         """
+        self._impl = pbt_C.create_data_client(project_id,
+            instance_id, credentials, endpoint)
 
-        if not isinstance(project_id, str):
-            raise ValueError("`project_id` must be a string")
-
-        if not isinstance(instance_id, str):
-            raise ValueError('`instance_id` must be a string')
-
-        # credentials_path
-        if credentials_path and not isinstance(credentials_path, str):
-            raise ValueError("`credentials_path` must be a string")
-
-        # endpoint
-        if endpoint and not isinstance(endpoint, str):
-            raise ValueError("`endpoint` must be a string")
-
-        self.credentials_path = credentials_path
-        self.endpoint = endpoint
-        self.project_id = project_id
-        self.instance_id = instance_id
-
-    def get_table(self, table_id, app_profile_id=None):
+    def get_table(self, table_id : str, app_profile_id : str=None):
         """Creates an instance of BigtableTable
-        
-        Args:
-            table_id: the ID of the table.
-            app_profile_id: The assigned application profile ID. Defaults to None.
-        """
-        return BigtableTable(table_id, app_profile_id, self)
 
+        Args:
+            table_id (str): the ID of the table.
+            app_profile_id (str): The assigned application profile ID. Defaults to None.
+        Returns:
+            BigtableTable: The relevant table operated through this client.
+        """
+        return BigtableTable(self, table_id, app_profile_id)
 
 class BigtableTable:
     """Entry point for reading data from Cloud Bigtable.
 
-        Prefetches the samples and creates a list with them.
+        Prefetches the sample_row_keys and creates a list with them.
         Each sample is a range open from the right, represented as a pair of two
         row_keys: the first key included in the sample and the first that is too big.
     """
 
     def __init__(self,
-                 client,
-                 table_id,
-                 app_profile_id=None,
-                 ) -> None:
+            client : BigtableClient,
+            table_id : str,
+            app_profile_id : str=None,
+            ) -> None:
         """
         Args:
-            table_id: The ID of the table.
-            app_profile_id: The assigned application profile ID.
-            client: BigtableClient object
+            table_id (str): The ID of the table.
+            app_profile_id (str): The assigned application profile ID.
+            client (BigtableClient): The client on which to operate.
         """
-
-        # table_id
-        if not isinstance(table_id, str):
-            raise ValueError("`table_id` must be a string")
-
-        # app_profile_id
-        if app_profile_id and not isinstance(app_profile_id, str):
-            raise ValueError("`app_profile_id` must be a string")
-
-        # client
-        if not isinstance(client, BigtableClient):
-            raise ValueError("`client` must be a BigtableClient")
-
         self._client = client
         self._table_id = table_id
         self._app_profile_id = app_profile_id
-        self._samples = pbt_C.io_big_table_sample_row_key(self._client,
-                                                          self._table_id,
-                                                          self._app_profile_id)
+        self._sample_row_keys = pbt_C.sample_row_keys(self._client._impl,
+                self._table_id,
+                self._app_profile_id)
 
     def write_tensor(self,
-                     tensor,
-                     columns,
-                     row_keys,
-                     ):
+            tensor : torch.Tensor,
+            columns : List[str],
+            row_keys : List[str],
+            ):
         """Opens a connection and writes data from tensor.
 
         Args:
@@ -112,117 +102,59 @@ class BigtableTable:
 
         """
 
-        # tensor
-        if not isinstance(tensor, torch.Tensor):
-            raise ValueError("`tensor` must be a torch.Tensor")
-
-        # columns
-        if not isinstance(columns, list):
-            raise ValueError("`columns` must be a list of strings")
         if not len(columns) != tensor.shape[0]:
             raise ValueError(
                 "`columns` must have the same length as tensor.shape[0]")
 
         for i, column_id in enumerate(columns):
-            if not isinstance(column_id, str) or len(column_id.split(':')) != 2:
+            if len(column_id.split(':')) != 2:
                 raise ValueError(f"`columns[{i}]` must be a string in format:"
                                  " \"column_family:column_name\"")
 
-        if not isinstance(row_keys, list):
-            raise ValueError(f"`row_keys` must be a list of strings")
+        pbt_C.write_tensor(self._client._impl,
+                self._table_id,
+                self._app_profile_id,
+                tensor,
+                columns,
+                row_keys)
 
-        for i, row_key in enumerate(row_keys):
-            if not isinstance(row_key, str):
-                raise ValueError(f"`row_keys[{i}]` must be a string")
-
-        pbt_C.io_big_table_write(self._client,
-                                 self._table_id,
-                                 self._app_profile_id,
-                                 tensor,
-                                 columns,
-                                 row_keys)
-
-    def read_rows_dataset(self,
-                          selected_columns,
-                          start_key=None,
-                          end_key=None,
-                          row_key_prefix=None,
-                          versions="latest"
-                          ):
+    def read_rows(self,
+            cell_type : torch.dtype,
+            columns : List[str],
+            row_set : pbt_C.RowSet,
+            versions : str="latest"
+            ) -> torch.utils.data.IterableDataset:
         """Returns a `CloudBigtableIterableDataset` object.
 
         Args:
-            selected_columns:  map of torch.dtype -> list_of_columns
-                list of columns must be in the following format:
-                ['column_family_1:column_name_1', ...]
-            start_key: row key range. Reading data from rows from <start key> to
-                <end key>. The range is assumed to be half-open, where the start
-                key is included and the end key is the first excluded key after
-                the range. Both keys are optional - if both are left out then
-                a full table scan will be performed.
-            end_key: the first excluded key after the range.
-            row_key_prefix: read data from all rows with a given prefix. Optional,
-                if left out, then all keys from the range will be included.
-            versions: 
+            cell_type (torch.dtype): the type as which to interpret the data in
+                the cells
+            columns (List[str]): the list of columns to read from; the order on
+                this list will determine the order in the output tensors
+            row_set (RowSet): set of rows to read.
+            versions (str):
                 specifies which version should be retrieved. Defaults to "latest"
                     "latest": most recent value is returned
                     "oldest": the oldest present value is returned.
         """
 
-        # selected_columns
-        if not isinstance(selected_columns, dict):
-            raise ValueError(
-                "`selected_columns` must be a dict torch.dtype -> list_of_columns")
-
-        # start_key
-        if start_key and not isinstance(start_key, str):
-            raise ValueError("`start_key` must be a string")
-
-        # end_key
-        if end_key and not isinstance(end_key, str):
-            raise ValueError("`end_key` must be a string")
-
-        # row_key_prefix
-        if row_key_prefix and not isinstance(row_key_prefix, str):
-            raise ValueError("`row_key_prefix` must be a string")
-
-        # versions
-        if not isinstance(versions, int) or versions < 1:
-            raise ValueError("`versions` must be a positive integer")
-
-        return _BigtableDataset(self._client,
-                                self._table_id,
-                                self._app_profile_id,
-                                self._samples,
-                                selected_columns,
-                                start_key,
-                                end_key,
-                                row_key_prefix,
-                                versions)
+        return _BigtableDataset(self, columns, cell_type, row_set, versions)
 
 
 class _BigtableDataset(torch.utils.data.IterableDataset):
 
     def __init__(self,
-                 client,
-                 table_id,
-                 app_profile_id,
-                 samples,
-                 selected_columns,
-                 start_key,
-                 end_key,
-                 row_key_prefix,
-                 versions) -> None:
+            table : BigtableTable,
+            columns : List[str],
+            cell_type : torch.dtype,
+            row_set : pbt_C.RowSet,
+            versions : str) -> None:
         super(_BigtableDataset).__init__()
 
-        self._client = client
-        self._table_id = table_id
-        self._app_profile_id = app_profile_id
-        self._samples = samples
-        self._selected_columns = selected_columns
-        self._start_key = start_key
-        self._end_key = end_key
-        self._row_key_prefix = row_key_prefix
+        self._table = table
+        self._columns = columns
+        self._cell_type = cell_type
+        self._row_set = row_set
         self._versions = versions
 
     def __iter__(self):
@@ -230,10 +162,10 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
         Returns an iterator over the CloudBigtable data.
 
         When called from the main thread we disregard
-        the samples and perform a single ReadRows call. 
+        the sample_row_keys and perform a single ReadRows call.
 
         When called from a worker thread each worker calculates
-        its share of the row_keys in a deterministic manner and 
+        its share of the row_keys in a deterministic manner and
         downloads them in one API call.
         """
 
@@ -241,14 +173,13 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
         num_workers = worker_info.num_workers if worker_info is not None else 1
         worker_id = worker_info.worker_id if worker_info is not None else 0
 
-        return pbt_C.io_big_table_iterator(self._client,
-                                           self._table_id,
-                                           self._app_profile_id,
-                                           self._samples,
-                                           self._selected_columns,
-                                           self._start_key,
-                                           self._end_key,
-                                           self._row_key_prefix,
-                                           self._versions,
-                                           num_workers,
-                                           worker_id)
+        return pbt_C.Iterator(self._table._client._impl,
+                self._table._table_id,
+                self._table._app_profile_id,
+                self._table._sample_row_keys,
+                self._columns,
+                self._cell_type,
+                self._row_set,
+                self._versions,
+                num_workers,
+                worker_id)
