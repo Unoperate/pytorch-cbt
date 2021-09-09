@@ -1,5 +1,6 @@
-#include "google/cloud/bigtable/table.h"
-#include "google/cloud/bigtable/table_admin.h"
+#include <google/cloud/bigtable/table.h>
+#include <google/cloud/bigtable/table_admin.h>
+#include <google/protobuf/text_format.h>
 #include <pybind11/pybind11.h>
 #include <rpc/rpc.h> /* xdr is a sub-library of rpc */
 #include <torch/extension.h>
@@ -222,6 +223,18 @@ BigtableDatasetIterator* CreateIterator(
                                      std::move(bigtable_client));
 }
 
+std::string PrintRowRange(cbt::RowRange const& row_range) {
+  std::string res;
+  google::protobuf::TextFormat::PrintToString(row_range.as_proto(), &res);
+  return res;
+}
+
+std::string PrintRowSet(cbt::RowSet const& row_set) {
+  std::string res;
+  google::protobuf::TextFormat::PrintToString(row_set.as_proto(), &res);
+  return res;
+}
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("sampleRowKey", &SampleRowKey, "get sample row_keys from BigTable",
         py::arg("client"), py::arg("table_id"),
@@ -246,4 +259,46 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
              return it;
            })
       .def("__next__", &BigtableDatasetIterator::next);
+
+  // NOLINTNEXTLINE(bugprone-unused-raii)
+  py::class_<cbt::RowRange>(m, "RowRange");
+
+  m.def("infinite_row_range", &cbt::RowRange::InfiniteRange,
+        "Create an infinite row range");
+  m.def("starting_at_row_range", &cbt::RowRange::StartingAt<std::string>,
+        "Create a row range from given row key to infinity",
+        py::arg("row_key"));
+  m.def("ending_at_row_range", &cbt::RowRange::EndingAt<std::string>,
+        "Create a row range from infinity to given row key",
+        py::arg("row_key"));
+  m.def("empty_row_range", &cbt::RowRange::Empty, "Create an empty row range");
+  m.def("prefix_row_range", &cbt::RowRange::Prefix<std::string>,
+        "Create a row range of rows starting with given prefix",
+        py::arg("prefix"));
+  m.def("right_open_row_range",
+        &cbt::RowRange::RightOpen<std::string, std::string>,
+        "Create a row range with start inclusive and end exclusive",
+        py::arg("start"), py::arg("end"));
+  m.def("left_open_row_range",
+        &cbt::RowRange::LeftOpen<std::string, std::string>,
+        "Create a row range with start exclusive and end inclusive",
+        py::arg("start"), py::arg("end"));
+  m.def("open_row_range", &cbt::RowRange::Open<std::string, std::string>,
+        "Create a row range with start and end both exclusive",
+        py::arg("start"), py::arg("end"));
+  m.def("closed_row_range", &cbt::RowRange::Closed<std::string, std::string>,
+        "Create a row range with start and end both inclusive",
+        py::arg("start"), py::arg("end"));
+
+  py::class_<cbt::RowSet>(m, "RowSet")
+      .def(py::init<>())
+      .def("append_row", &cbt::RowSet::Append<std::string>, py::arg("row_key"))
+      .def("append_range",
+           static_cast<void (cbt::RowSet::*)(cbt::RowRange)>(
+               &cbt::RowSet::Append),
+           py::arg("row_range"))
+      .def("intersect", &cbt::RowSet::Intersect, py::arg("row_range"));
+
+  m.def("print_row_set", &PrintRowSet, py::arg("row_set"));
+  m.def("print_row_range", &PrintRowRange, py::arg("row_range"));
 }
