@@ -1,6 +1,8 @@
 #include <google/cloud/bigtable/table.h>
 #include <google/cloud/bigtable/table_admin.h>
 #include <google/protobuf/text_format.h>
+#include <grpcpp/security/credentials.h>
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <rpc/rpc.h> /* xdr is a sub-library of rpc */
 #include <torch/extension.h>
@@ -33,11 +35,11 @@ float BytesToFloat(std::string s) {
   return v;
 }
 
-void putCellValueInTensor(torch::Tensor& tensor, int index, torch::Dtype dtype,
-                          cbt::Cell const& cell) {
-  switch (dtype) {
+void PutCellValueInTensor(torch::Tensor* tensor, int index,
+                          torch::Dtype cell_type, cbt::Cell const& cell) {
+  switch (cell_type) {
     case torch::kFloat32:
-      tensor.index_put_({index}, BytesToFloat(cell.value()));
+      tensor->index_put_({index}, BytesToFloat(cell.value()));
       break;
 
     default:
@@ -45,12 +47,11 @@ void putCellValueInTensor(torch::Tensor& tensor, int index, torch::Dtype dtype,
   }
 }
 
-cbt::Filter createColumnsFilter(
-    const std::map<std::pair<std::string, std::string>, size_t>&
-        selected_columns) {
+cbt::Filter CreateColumnsFilter(
+    std::map<std::pair<std::string, std::string>, size_t> const& columns) {
   std::vector<cbt::Filter> filters;
 
-  for (const auto& key : selected_columns) {
+  for (const auto& key : columns) {
     std::pair<std::string, std::string> pair = key.first;
     cbt::Filter f = cbt::Filter::ColumnName(pair.first, pair.second);
     filters.push_back(std::move(f));
@@ -60,7 +61,7 @@ cbt::Filter createColumnsFilter(
 }
 
 std::pair<std::string, std::string> ColumnNameToPair(
-    const std::string& col_name_full) {
+    std::string const& col_name_full) {
   size_t delimiter_pos = col_name_full.find(':');
   if (delimiter_pos == std::string::npos)
     throw std::invalid_argument("Invalid column name:" + col_name_full +
@@ -73,63 +74,52 @@ std::pair<std::string, std::string> ColumnNameToPair(
   return pair;
 }
 
-}  // namespace
+std::unique_ptr<cbt::Table> CreateTable(
+    std::shared_ptr<cbt::DataClient> const& data_client,
+    std::string const& table_id,
+    std::optional<std::string> const& app_profile_id) {
+  return app_profile_id ? std::make_unique<cbt::Table>(
+                              data_client, *std::move(app_profile_id), table_id)
+                        : std::make_unique<cbt::Table>(data_client, table_id);
+}
 
-py::list SampleRowKey(py::object const& client, std::string const& table_id,
-                      const std::optional<std::string>& app_profile_id) {
-  auto project_id = client.attr("project_id").cast<std::string>();
-  auto instance_id = client.attr("instance_id").cast<std::string>();
+py::list SampleRowKeys(std::shared_ptr<cbt::DataClient> const& data_client,
+                       std::string const& table_id,
+                       std::optional<std::string> const& app_profile_id) {
+  auto table = CreateTable(data_client, table_id, app_profile_id);
 
-  if (app_profile_id) throw std::runtime_error("app_profile_id not supported.");
-
-  auto bigtable_client = cbt::CreateDefaultDataClient(project_id, instance_id,
-                                                      cbt::ClientOptions());
-
-  cbt::Table table(bigtable_client, table_id);
-
-  google::cloud::StatusOr<std::vector<cbt::RowKeySample>> samples =
-      table.SampleRows();
-  if (!samples.ok()) throw std::runtime_error(samples.status().message());
+  auto maybe_sample_row_keys = table->SampleRows();
+  if (!maybe_sample_row_keys.ok())
+    throw std::runtime_error(maybe_sample_row_keys.status().message());
+  auto& sample_row_keys = maybe_sample_row_keys.value();
 
   py::list res;
-
-  for (auto const& resp : samples.value()) {
-    std::string rk = resp.row_key;
-    auto tuple = py::make_tuple(rk, resp.offset_bytes);
-    res.append(tuple);
+  for (auto const& resp : sample_row_keys) {
+    res.append(py::make_tuple(resp.row_key, resp.offset_bytes));
   }
 
   return res;
 }
 
-void Write(py::object const& client, std::string const& tableId,
-           const std::optional<std::string>& appProfileId,
-           torch::Tensor const& tensor, py::list const& columns,
-           py::list const& row) {
-  if (appProfileId)
-    throw std::invalid_argument("app_profile_id not supported.");
-  auto project_id = client.attr("project_id").cast<std::string>();
-  auto instance_id = client.attr("instance_id").cast<std::string>();
+void WriteTensor(std::shared_ptr<cbt::DataClient> const& data_client,
+                 std::string const& table_id,
+                 std::optional<std::string> const& app_profile_id,
+                 torch::Tensor const& tensor, py::list const& columns,
+                 py::list const& row) {
+  auto table = CreateTable(data_client, table_id, app_profile_id);
 
-  auto bigtable_client = cbt::CreateDefaultDataClient(project_id, instance_id,
-                                                      cbt::ClientOptions());
-
-  cbt::Table table(bigtable_client, tableId);
-
-  auto* ptr = static_cast<float*>(tensor.data_ptr());
+  auto* tensor_ptr = static_cast<float*>(tensor.data_ptr());
 
   for (int i = 0; i < tensor.size(0); i++) {
     auto row_key = row[i].cast<std::string>();
 
     for (int j = 0; j < tensor.size(1); j++) {
       auto col_name_full = columns[j].cast<std::string>();
-      std::string col_family = col_name_full.substr(0, col_name_full.find(':'));
-      std::string col_name = col_name_full.substr(col_name_full.find(':') + 1,
-                                                  col_name_full.length());
-      google::cloud::Status status = table.Apply(cbt::SingleRowMutation(
+      auto [col_family, col_name] = ColumnNameToPair(col_name_full);
+      google::cloud::Status status = table->Apply(cbt::SingleRowMutation(
           row_key, cbt::SetCell(std::move(col_family), std::move(col_name),
-                                FloatToBytes(*ptr))));
-      ++ptr;
+                                FloatToBytes(*tensor_ptr))));
+      ++tensor_ptr;
       if (!status.ok()) throw std::runtime_error(status.message());
     }
   }
@@ -137,29 +127,36 @@ void Write(py::object const& client, std::string const& tableId,
 
 class BigtableDatasetIterator {
  public:
-  BigtableDatasetIterator(
-      cbt::RowReader reader,
-      std::map<std::pair<std::string, std::string>, size_t> const& column_map,
-      torch::Dtype dtype, cbt::Table const& table,
-      std::shared_ptr<cbt::DataClient> const& client)
-      : reader_(std::move(reader)),
-        column_map_(std::move(column_map)),
-        dtype_(std::move(dtype)),
-        table_(std::move(table)),
-        client_(std::move(client)) {
-    this->it_ = this->reader_.begin();
+  BigtableDatasetIterator(std::shared_ptr<cbt::DataClient> const& data_client,
+                          std::string const& table_id,
+                          std::optional<std::string> const& app_profile_id,
+                          py::list const& /*sample_row_keys*/,
+                          py::list const& columns, py::object cell_type,
+                          cbt::RowSet const& row_set,
+                          std::string const& versions, int /*num_workers*/,
+                          int /*worker_id*/)
+      : column_map_(CreateColumnMap(columns)),
+        cell_type_(
+            torch::python::detail::py_object_to_dtype(std::move(cell_type))),
+        reader_(CreateTable(data_client, table_id, app_profile_id)
+                    ->ReadRows(row_set, cbt::Filter::Chain(
+                                            CreateColumnsFilter(column_map_),
+                                            cbt::Filter::Latest(1)))),
+        it_(this->reader_.begin()) {
+    if (versions != "latest")
+      throw std::invalid_argument("only `version`='latest' is supported.");
   }
 
   torch::Tensor next() {
     if (it_ == reader_.end()) throw py::stop_iteration();
 
-    torch::Tensor tensor = torch::empty(this->column_map_.size(),
-                                        torch::TensorOptions().dtype(dtype_));
+    torch::Tensor tensor = torch::empty(
+        this->column_map_.size(), torch::TensorOptions().dtype(cell_type_));
     auto const& row = *it_;
     for (const auto& cell : row.value().cells()) {
       std::pair<std::string, std::string> key(cell.family_name(),
                                               cell.column_qualifier());
-      putCellValueInTensor(tensor, column_map_[key], dtype_, cell);
+      PutCellValueInTensor(&tensor, column_map_[key], cell_type_, cell);
     }
 
     it_ = std::next(it_);
@@ -167,60 +164,32 @@ class BigtableDatasetIterator {
   }
 
  private:
-  torch::Dtype dtype_;
-  cbt::RowReader reader_;
-  std::map<std::pair<std::string, std::string>, size_t> column_map_;
-  cbt::v1::internal::RowReaderIterator it_;
-  cbt::Table table_;
-  std::shared_ptr<cbt::DataClient> client_;
-};
-
-BigtableDatasetIterator* CreateIterator(
-    py::object const& client, std::string const& table_id,
-    std::optional<std::string> const& app_profile_id, py::list const& samples,
-    py::list const& selected_columns, std::string const& start_key,
-    std::string const& end_key, std::string const& rowKey_prefix,
-    std::string const& versions, const int num_workers, const int worker_id) {
-  if (app_profile_id)
-    throw std::invalid_argument("app_profile_id not supported.");
-  if (rowKey_prefix.length() >= 1)
-    throw std::invalid_argument("rowKey_prefix not supported.");
-  if (versions != "latest")
-    throw std::invalid_argument("only `version`='latest' is supported.");
-
-  std::cout << "got " << samples.size() << " samples.\n";
-
-  std::cout << "running worker no. " << worker_id << " of " << num_workers
-            << " in total.\n";
-  auto const project_id = client.attr("project_id").cast<std::string>();
-  auto const instance_id = client.attr("instance_id").cast<std::string>();
-
-  // we're using a regular map because unordered_map cannot hash a pair by
-  // default.
-  std::map<std::pair<std::string, std::string>, size_t> column_map;
-  size_t index = 0;
-  for (const auto& column_name : selected_columns) {
-    std::pair<std::string, std::string> pair =
-        ColumnNameToPair(column_name.cast<std::string>());
-    column_map[pair] = index++;
+  static std::map<std::pair<std::string, std::string>, size_t> CreateColumnMap(
+      py::list const& columns) {
+    std::map<std::pair<std::string, std::string>, size_t> column_map;
+    size_t index = 0;
+    for (const auto& column_name : columns) {
+      std::pair<std::string, std::string> pair =
+          ColumnNameToPair(column_name.cast<std::string>());
+      column_map[pair] = index++;
+    }
+    return column_map;
   }
 
-  auto bigtable_client = cbt::CreateDefaultDataClient(project_id, instance_id,
-                                                      cbt::ClientOptions());
+  // Mapping between column names and their indices in tensors.  We're using a
+  // regular map because unordered_map cannot hash a pair by default.
+  std::map<std::pair<std::string, std::string>, size_t> column_map_;
+  torch::Dtype cell_type_;
+  cbt::RowReader reader_;
+  cbt::v1::internal::RowReaderIterator it_;
+};
 
-  cbt::Table table(bigtable_client, table_id);
-
-  cbt::Filter filter_columns = createColumnsFilter(column_map);
-  cbt::Filter filter =
-      cbt::Filter::Chain(std::move(filter_columns), cbt::Filter::Latest(1));
-
-  auto reader = table.ReadRows(
-      cbt::RowRange::Range(std::move(start_key), std::move(end_key)),
-      std::move(filter));
-
-  return new BigtableDatasetIterator(std::move(reader), std::move(column_map),
-                                     torch::kFloat32, std::move(table),
-                                     std::move(bigtable_client));
+std::shared_ptr<cbt::DataClient> CreateDataClient(
+    std::string const& project_id, std::string const& instance_id,
+    py::object const& /*credentials*/, std::string const& /*endpoint*/) {
+  google::cloud::Options options;
+  return cbt::CreateDefaultDataClient(project_id, instance_id,
+                                      cbt::ClientOptions(options));
 }
 
 std::string PrintRowRange(cbt::RowRange const& row_range) {
@@ -247,30 +216,40 @@ void AppendRowOrRange(cbt::RowSet& row_set, py::args const& args) {
   }
 }
 
+}  // namespace
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("sampleRowKey", &SampleRowKey, "get sample row_keys from BigTable",
-        py::arg("client"), py::arg("table_id"),
+  m.def("sample_row_keys", &SampleRowKeys, "get sample row_keys from BigTable",
+        py::arg("data_client"), py::arg("table_id"),
         py::arg("application_profile_id") = py::none());
 
-  m.def("write", &Write, "write tensor to BigTable", py::arg("client"),
-        py::arg("table_id"), py::arg("app_profile_id") = py::none(),
-        py::arg("tensor"), py::arg("columns"), py::arg("row_keys"));
-
-  m.def("createIterator", &CreateIterator, "get BigTable ReadRows iterator",
+  m.def("write_tensor", &WriteTensor, "write tensor to BigTable",
         py::arg("client"), py::arg("table_id"),
-        py::arg("app_profile_id") = py::none(), py::arg("samples"),
-        py::arg("selected_columns"), py::arg("start_key"), py::arg("end_key"),
-        py::arg("row_key_prefix"), py::arg("versions"), py::arg("num_workers"),
-        py::arg("worker_id")
-
-  );
+        py::arg("app_profile_id") = py::none(), py::arg("tensor"),
+        py::arg("columns"), py::arg("row_keys"));
 
   py::class_<BigtableDatasetIterator>(m, "Iterator")
+      .def(py::init<std::shared_ptr<cbt::DataClient>, std::string,
+                    std::optional<std::string>, py::list, py::list, py::object,
+                    cbt::RowSet const&, std::string, int, int>(),
+           "get BigTable ReadRows iterator", py::arg("client"),
+           py::arg("table_id"), py::arg("app_profile_id") = py::none(),
+           py::arg("sample_row_keys"), py::arg("columns"), py::arg("cell_type"),
+           py::arg("row_set"), py::arg("versions"), py::arg("num_workers"),
+           py::arg("worker_id"))
       .def("__iter__",
            [](BigtableDatasetIterator& it) -> BigtableDatasetIterator& {
              return it;
            })
       .def("__next__", &BigtableDatasetIterator::next);
+
+  // NOLINTNEXTLINE(bugprone-unused-raii)
+  py::class_<cbt::DataClient, std::shared_ptr<cbt::DataClient>>(
+      m, "BigtableDataClient");
+
+  m.def("create_data_client", &CreateDataClient, "Create a cbt::DataClient",
+        py::arg("project_id"), py::arg("instance_id"), py::arg("credentials"),
+        py::arg("endpoint"));
 
   // NOLINTNEXTLINE(bugprone-unused-raii)
   py::class_<cbt::RowRange>(m, "RowRange").def("__repr__", &PrintRowRange);
@@ -304,11 +283,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
   py::class_<cbt::RowSet>(m, "RowSet")
       .def(py::init<>())
-      .def("append_row", &cbt::RowSet::Append<std::string>, py::arg("row_key"))
-      .def("append_range",
-           static_cast<void (cbt::RowSet::*)(cbt::RowRange)>(
-               &cbt::RowSet::Append),
-           py::arg("row_range"))
       .def("append", &AppendRowOrRange)
       .def("intersect", &cbt::RowSet::Intersect, py::arg("row_range"))
       .def("__repr__", &PrintRowSet);
