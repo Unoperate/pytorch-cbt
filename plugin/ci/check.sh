@@ -29,12 +29,14 @@ log "Testing if the cc sources are properly formatted."
 find \( -name \*.cc -o -name \*.h \) -print0 \
   | xargs -0 clang-format-10 --dry-run --Werror
 
-log "Compiling and installing the project"
-
 cd "$PROJECT_DIR"
-python3 setup.py install
 
 log "Installing the project"
+python3 setup.py develop
+
+log "Testing the project"
+LD_LIBRARY_PATH=/usr/local/lib/python3.8/dist-packages/torch/lib \
+	python3 -m unittest -v
 
 EMULATOR_LOG=$(mktemp)
 "$EMULATOR_PATH" -host 127.0.0.1 -port 0 >"$EMULATOR_LOG" &
