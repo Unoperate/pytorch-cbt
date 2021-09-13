@@ -3,6 +3,7 @@ set -e -u -o pipefail
 
 THIS_SCRIPT_DIR=$( cd "$( dirname "$0" )" ; pwd )
 PROJECT_DIR=$( cd "$THIS_SCRIPT_DIR/.." ; pwd )
+PYLINTRC="$PROJECT_DIR/.pylintrc"
 
 log() {
   echo "$@" > /dev/stderr
@@ -35,3 +36,6 @@ clang-tidy-10 $(find -name \*.cc -o -name \*.h) \
   -I /usr/local/lib/python3.8/dist-packages/torch/include \
   -I /usr/local/lib/python3.8/dist-packages/torch/include/torch/csrc/api/include \
   -I /usr/include/python3.8
+
+log "Running pylint"
+pylint pytorch_bigtable
