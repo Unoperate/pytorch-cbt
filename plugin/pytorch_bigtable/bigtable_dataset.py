@@ -1,8 +1,6 @@
 import torch
-import math
 import pbt_C
 from typing import List
-from pytorch_bigtable.row_set import RowSet,RowRange
 from pytorch_bigtable.recreate_on_fork import RecreateOnFork
 
 class BigtableCredentials:
@@ -14,7 +12,8 @@ class ServiceAccountJson(BigtableCredentials):
     def __init__(self, json_text : str):
         self._json_text = json_text
 
-    def read_from_file(path : str):
+    @classmethod
+    def read_from_file(cls, path : str):
         with open(path, 'r') as f:
             return ServiceAccountJson(f.read())
 
@@ -37,10 +36,10 @@ class BigtableClient:
         Args:
             project_id (str): The assigned project ID of the project.
             instance_id (str): The assigned instance ID.
-            credentails (BigtableCredentials): An object used for obtaining
+            credentials (BigtableCredentials): An object used for obtaining
                 credentials to authenticate to Cloud Bigtable. If set to None,
                 the default credentials will be used (i.e. machine service
-                account in GCS or GOOGLE_APPLICATION_CREDENTIALS envrionment
+                account in GCS or GOOGLE_APPLICATION_CREDENTIALS environment
                 variable). Consult google-cloud-cpp project for more
                 information.
             endpoint (str): A custom URL, where Cloud Bigtable is available. If
@@ -123,7 +122,7 @@ class BigtableTable:
     def read_rows(self,
             cell_type : torch.dtype,
             columns : List[str],
-            row_set : RowSet,
+            row_set : pbt_C.RowSet,
             versions : str="latest"
             ) -> torch.utils.data.IterableDataset:
         """Returns a `CloudBigtableIterableDataset` object.
@@ -133,6 +132,7 @@ class BigtableTable:
                 the cells
             columns (List[str]): the list of columns to read from; the order on
                 this list will determine the order in the output tensors
+            row_set (RowSet): set of rows to read.
             versions (str):
                 specifies which version should be retrieved. Defaults to "latest"
                     "latest": most recent value is returned
@@ -148,7 +148,7 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
             table : BigtableTable,
             columns : List[str],
             cell_type : torch.dtype,
-            row_set : RowSet,
+            row_set : pbt_C.RowSet,
             versions : str) -> None:
         super(_BigtableDataset).__init__()
 
@@ -180,7 +180,7 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
                 self._table._sample_row_keys,
                 self._columns,
                 self._cell_type,
-                self._row_set._impl,
+                self._row_set,
                 self._versions,
                 num_workers,
                 worker_id)

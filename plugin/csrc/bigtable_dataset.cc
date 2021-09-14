@@ -242,7 +242,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         py::arg("endpoint"));
 
   // NOLINTNEXTLINE(bugprone-unused-raii)
-  py::class_<cbt::RowRange>(m, "RowRange");
+  py::class_<cbt::RowRange>(m, "RowRange")
+      .def("__repr__", &PrintRowRange);
 
   m.def("infinite_row_range", &cbt::RowRange::InfiniteRange,
         "Create an infinite row range");
@@ -278,8 +279,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
            static_cast<void (cbt::RowSet::*)(cbt::RowRange)>(
                &cbt::RowSet::Append),
            py::arg("row_range"))
-      .def("intersect", &cbt::RowSet::Intersect, py::arg("row_range"));
-
-  m.def("print_row_set", &PrintRowSet, py::arg("row_set"));
-  m.def("print_row_range", &PrintRowRange, py::arg("row_range"));
+      .def("intersect", &cbt::RowSet::Intersect, py::arg("row_range"))
+      .def("__repr__", &PrintRowSet);
 }

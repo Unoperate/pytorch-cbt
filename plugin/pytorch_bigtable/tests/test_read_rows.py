@@ -2,7 +2,7 @@ import unittest
 import torch
 import os
 from .bigtable_emulator import BigtableEmulator
-from pytorch_bigtable import BigtableClient,RowSet,RowRange
+from pytorch_bigtable import BigtableClient, row_range, row_set
 
 class BigtableReadTest(unittest.TestCase):
     def setUp(self):
@@ -27,5 +27,5 @@ class BigtableReadTest(unittest.TestCase):
         for tensor in table.read_rows(
                 torch.float32,
                 ["fam1:col1", "fam1:col2"],
-                RowSet(RowRange.infinite())):
+                row_set.from_rows_or_ranges(row_range.infinite())):
             print("Got tensor: %s" % tensor)

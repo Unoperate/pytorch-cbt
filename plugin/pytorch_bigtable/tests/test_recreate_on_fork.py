@@ -2,7 +2,7 @@ import os
 from unittest import TestCase
 from datetime import datetime
 
-from pytorch_bigtable.row_set import RowRange,RowSet
+from pytorch_bigtable import row_set
 from pytorch_bigtable.recreate_on_fork import RecreateOnFork
 
 class RecreateOnForkTest(TestCase):
