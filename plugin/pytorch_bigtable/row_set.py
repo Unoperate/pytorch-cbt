@@ -18,10 +18,7 @@ def from_rows_or_ranges(*args: Union[str, pbt_C.RowRange]) -> pbt_C.RowSet:
   """
   row_set = pbt_C.RowSet()
   for row_or_range in args:
-    if isinstance(row_or_range, pbt_C.RowRange):
-      row_set.append_range(row_or_range)
-    else:
-      row_set.append_row(row_or_range)
+    row_set.append(row_or_range)
 
   return row_set
 

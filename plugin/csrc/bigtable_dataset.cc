@@ -204,6 +204,17 @@ std::string PrintRowSet(cbt::RowSet const& row_set) {
   return res;
 }
 
+void AppendRowOrRange(cbt::RowSet& row_set, py::args args) {
+  for (auto const& arg : args) {
+    if (py::isinstance<cbt::RowRange>(arg))
+      row_set.Append(arg.cast<cbt::RowRange>());
+    else if (py::isinstance<std::string>(arg))
+      row_set.Append(arg.cast<std::string>());
+    else
+      throw py::type_error(
+          "argument must be a row (str) or a range (RowRange)");
+  }
+}
 }  // namespace
 
 using UnderlyingDtypeType = std::underlying_type<torch::Dtype>::type;
@@ -242,8 +253,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         py::arg("endpoint"));
 
   // NOLINTNEXTLINE(bugprone-unused-raii)
-  py::class_<cbt::RowRange>(m, "RowRange")
-      .def("__repr__", &PrintRowRange);
+  py::class_<cbt::RowRange>(m, "RowRange").def("__repr__", &PrintRowRange);
 
   m.def("infinite_row_range", &cbt::RowRange::InfiniteRange,
         "Create an infinite row range");
@@ -279,6 +289,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
            static_cast<void (cbt::RowSet::*)(cbt::RowRange)>(
                &cbt::RowSet::Append),
            py::arg("row_range"))
+      .def("append", &AppendRowOrRange)
       .def("intersect", &cbt::RowSet::Intersect, py::arg("row_range"))
       .def("__repr__", &PrintRowSet);
 }
