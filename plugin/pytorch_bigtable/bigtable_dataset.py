@@ -15,7 +15,7 @@ class ServiceAccountJson(BigtableCredentials):
     @classmethod
     def read_from_file(cls, path : str):
         with open(path, 'r') as f:
-            return ServiceAccountJson(f.read())
+            return cls(f.read())
 
 class BigtableClient:
     """CloudBigtableClient is the main entrypoint for

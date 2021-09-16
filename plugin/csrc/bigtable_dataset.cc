@@ -208,7 +208,7 @@ void AppendRowOrRange(cbt::RowSet& row_set, py::args args) {
   for (auto const& arg : args) {
     if (py::isinstance<cbt::RowRange>(arg))
       row_set.Append(arg.cast<cbt::RowRange>());
-    else if (py::isinstance<std::string>(arg))
+    else if (py::isinstance<py::str>(arg))
       row_set.Append(arg.cast<std::string>());
     else
       throw py::type_error(
