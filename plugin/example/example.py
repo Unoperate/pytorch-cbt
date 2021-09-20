@@ -29,12 +29,12 @@ input_features=['TX_AMOUNT','TX_DURING_WEEKEND', 'TX_DURING_NIGHT', 'CUSTOMER_ID
                 'TERMINAL_ID_RISK_30DAY_WINDOW']
 
 def create_model():
-  d_in, d_h1, d_h2, d_out = len(input_features), len(input_features), len(input_features), 1
+  d_in, d_h1, d_h2, d_out = len(input_features), len(input_features), len(input_features)//2, 1
   nn_model = torch.nn.Sequential(
     torch.nn.Linear(d_in, d_h1),
-    torch.nn.ReLU(),
+    torch.nn.Sigmoid(),
     torch.nn.Linear(d_h1, d_h2),
-    torch.nn.ReLU(),
+    torch.nn.Sigmoid(),
     torch.nn.Linear(d_h2, d_out),
     torch.nn.Sigmoid(),
   )
@@ -47,7 +47,7 @@ def init_weights(m):
     m.bias.data.fill_(0.1)
 
 def train_model(model, loader, optimizer, max_epochs=50):
-  torch.manual_seed(1234567)
+  torch.manual_seed(66543)
   loss_fn = torch.nn.BCELoss()
   model.train()
   model.apply(init_weights)
