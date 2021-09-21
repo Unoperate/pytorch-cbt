@@ -37,7 +37,7 @@ clang-tidy-10 $(find -name \*.cc -o -name \*.h) \
   -I /usr/include/python3.8
 
 log "Getting pylintrc"
-curl https://google.github.io/styleguide/pylintrc --output pylintrc
+curl -sSL https://google.github.io/styleguide/pylintrc --output pylintrc
 
 log "Running pylint"
 pylint pytorch_bigtable
