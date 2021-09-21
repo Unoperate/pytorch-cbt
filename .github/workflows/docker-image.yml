@@ -13,9 +13,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: debugging
-      run: docker load --help
-    
     - uses: actions/checkout@v2
     
     - name: Cache dockerimage
@@ -35,7 +32,7 @@ jobs:
       
     - name: load image
       if: steps.image-cache.outputs.cache-hit == 'true'
-      run: docker load --input pythorch_cbt_devel.tar pythorch_cbt_devel
+      run: docker load --input pythorch_cbt_devel.tar
     
     - name: Run tests
 #       run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_devel /opt/pytorch/ci/check.sh
