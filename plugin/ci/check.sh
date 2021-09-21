@@ -35,3 +35,9 @@ clang-tidy-10 $(find -name \*.cc -o -name \*.h) \
   -I /usr/local/lib/python3.8/dist-packages/torch/include \
   -I /usr/local/lib/python3.8/dist-packages/torch/include/torch/csrc/api/include \
   -I /usr/include/python3.8
+
+log "Getting pylintrc"
+curl -sSL https://google.github.io/styleguide/pylintrc --output pylintrc
+
+log "Running pylint"
+pylint pytorch_bigtable
