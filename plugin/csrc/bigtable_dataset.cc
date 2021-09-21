@@ -148,26 +148,32 @@ int get_worker_start_index(int len, int num_workers, int worker_id) {
 cbt::RowSet CreateRowSet(cbt::RowSet row_set,
                                 py::list const& sample_row_keys,
                                 int num_workers, int worker_id) {
-  int len = sample_row_keys.size() + 1;
-  if (worker_id >= len) {
-    return cbt::RowRange::Empty();
-  }
-  // get the subset of sample row keys
+  std::vector<std::pair<std::string,std::string>> filtered;
   std::string start_key;
-  std::string end_key = std::string("\0", 1);
-  if (worker_id > 0) {  // nie jest pierwszy
-    int start_key_index = get_worker_start_index(len, num_workers, worker_id);
-    start_key = sample_row_keys[start_key_index].cast<std::string>();
+  for(auto & tuple : sample_row_keys){
+    auto end_key = tuple[0].cast<std::string>();
+    // check if intersects
+    auto range = cbt::RowRange::Range(start_key, end_key);
+    if(!row_set.Intersect(range).IsEmpty()){
+      // save if intersects
+      filtered.emplace_back(start_key, end_key);
+    }
+    start_key = std::move(end_key);
   }
-  if (worker_id < len - 1) {  // nie jest ostatni
-    int end_key_index =
-        get_worker_start_index(len, num_workers, worker_id + 1);
-    end_key = sample_row_keys[end_key_index].cast<std::string>();
+  // if last range was not infinite append
+  if(!filtered.back().second.empty()){
+    start_key = filtered.back().second;
+    filtered.emplace_back(start_key, "");
   }
-  cbt::RowRange range = cbt::RowRange::Range(start_key, end_key);
+  int start = get_worker_start_index(filtered.size(), num_workers, worker_id);
+  int end = get_worker_start_index(filtered.size(), num_workers, worker_id + 1);
 
-  row_set.Intersect(range);
-  return row_set;
+  if(start >= end) return cbt::RowRange::Empty();
+
+  start_key = filtered.at(start).first;
+  std::string end_key = filtered.at(end).second;
+
+  return row_set.Intersect(cbt::RowRange::Range(start_key, end_key));
 }
 
 
