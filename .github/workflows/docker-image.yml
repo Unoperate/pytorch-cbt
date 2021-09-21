@@ -20,7 +20,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/pythorch_cbt_devel.tar
-        key: ${{ runner.os }}-docker-image-${{ hashFiles('Dockerfile') }}
+        key: ${{ runner.os }}-docker-image-${{ hashFiles('Dockerfile', '.dockerignore', 'install-cloud-sdk.sh') }}
     
     - name: Build the Docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
@@ -35,6 +35,5 @@ jobs:
       run: docker load --input ~/pythorch_cbt_devel.tar
     
     - name: Run tests
-#       run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_devel /opt/pytorch/ci/check.sh
-      run: echo "Running tests"
+      run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_devel /opt/pytorch/ci/check.sh
 
