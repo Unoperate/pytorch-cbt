@@ -172,7 +172,6 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
         worker_info = torch.utils.data.get_worker_info()
         num_workers = worker_info.num_workers if worker_info is not None else 1
         worker_id = worker_info.worker_id if worker_info is not None else 0
-        print("creating iterator")
         return pbt_C.Iterator(self._table._client._impl,
                 self._table._table_id,
                 self._table._app_profile_id,
