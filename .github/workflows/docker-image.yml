@@ -20,7 +20,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/pythorch_cbt_devel.tar
-        key: ${{ runner.os }}-pythorch_cbt_devel-${{ hashFiles('Dockerfile') }}
+        key: ${{ runner.os }}-docker-image-${{ hashFiles('Dockerfile') }}
     
     - name: Build the Docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
