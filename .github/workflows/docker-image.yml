@@ -28,11 +28,11 @@ jobs:
     
     - name: tar docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
-      run: docker save --output pythorch_cbt_devel.tar pythorch_cbt_devel
+      run: docker save --output ~/pythorch_cbt_devel.tar pythorch_cbt_devel
       
     - name: load image
       if: steps.image-cache.outputs.cache-hit == 'true'
-      run: docker load --input pythorch_cbt_devel.tar
+      run: docker load --input ~/pythorch_cbt_devel.tar
     
     - name: Run tests
 #       run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_devel /opt/pytorch/ci/check.sh
