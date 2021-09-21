@@ -1,3 +1,4 @@
+"""Module implementing basic functions for obtaining BigTable RowRanges"""
 import pbt_C
 
 
