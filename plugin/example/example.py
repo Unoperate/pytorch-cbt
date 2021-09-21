@@ -49,29 +49,8 @@ def init_weights(m):
     torch.nn.init.xavier_uniform_(m.weight)
     m.bias.data.fill_(0.1)
 
-def train_model_bt(model, loader, optimizer, max_epochs=50):
-  torch.manual_seed(66543)
-  loss_fn = torch.nn.BCELoss()
-  model.train()
-  model.apply(init_weights)
-  for epoch in range(1, max_epochs+1):
-    total_loss = 0
-    for i, data in enumerate(loader):
-      X, y = data[:,:-1], data[:,-1]
-      print("training on batch ", y.reshape(-1).sum(), '/', y.shape[0])
-      y_pred = model(X)
-      loss = loss_fn(y_pred.reshape(-1), y)
-      total_loss += loss.item()
-      loss.backward()
-      optimizer.step()
-      optimizer.zero_grad()
-      if i % 10 == 0:
-        print('at iter {}, loss={}'.format(i, loss.item()))
-    print('At epoch {}, loss={}'.format(epoch, total_loss))
-  return
 
 def train_model(model, loader, optimizer, max_epochs=50):
-  torch.manual_seed(66543)
   loss_fn = torch.nn.BCELoss()
   model.train()
   model.apply(init_weights)
@@ -79,7 +58,10 @@ def train_model(model, loader, optimizer, max_epochs=50):
     total_loss = 0
 
     for i, data in enumerate(loader, 0):
-      X, y = data
+      if isinstance(loader.dataset, CreditCardDataset):
+        X, y = data
+      else:
+        X, y = data[:,:-1], data[:,-1]
       # print("training on batch ", y.reshape(-1).sum(), '/', y.shape[0])
       y_pred = model(X)
       loss = loss_fn(y_pred.reshape(-1), y)
@@ -96,7 +78,6 @@ def eval_model(model, eval_set, batch_size, output="out.png"):
   model.eval()
   loader = torch.utils.data.DataLoader(eval_set, batch_size)
   with torch.no_grad():
-    correct, total = 0, 0
     y_all = None
     y_pred_all = None
     for i, data in enumerate(loader, 0):
@@ -154,13 +135,10 @@ if __name__ == '__main__':
   eval_model(model=model, eval_set=test_set, batch_size=batch_size, output="before.png")
 
   print("training")
-  # train_model(model=model, loader=loader, optimizer=optimizer,  max_epochs=20)
-  train_model_bt(model=model, loader=loader, optimizer=optimizer,  max_epochs=10)
+  train_model(model=model, loader=loader, optimizer=optimizer,  max_epochs=20)
 
   torch.save(model.state_dict(), "model.backup")
-  model.load_state_dict(torch.load("model.backup"))
-
-
+  # model.load_state_dict(torch.load("model.backup"))
 
   print("testing after training")
   eval_model(model=model, eval_set=test_set, batch_size=batch_size, output="after.png")
