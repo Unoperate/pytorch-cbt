@@ -116,7 +116,7 @@ void WriteTensor(py::object const& client,
                  std::optional<std::string> const& app_profile_id,
                  torch::Tensor const& tensor, py::list const& columns,
                  py::list const& row) {
-  std::shared_ptr<cbt::DataClient> data_client  = CreateDataClient(client);
+  std::shared_ptr<cbt::DataClient> data_client = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
   auto* tensor_ptr = static_cast<float*>(tensor.data_ptr());
@@ -136,22 +136,58 @@ void WriteTensor(py::object const& client,
   }
 }
 
+int get_worker_start_index(int len, int num_workers, int worker_id) {
+  if (len <= num_workers) return std::min(worker_id, len);
+  int rows_per_worker = len / num_workers;
+  int additional_rows = len % num_workers;
+  int workers_before = worker_id;
+  return rows_per_worker * workers_before +
+         std::min(additional_rows, workers_before);
+}
+
+cbt::RowSet CreateRowSet(cbt::RowSet row_set,
+                                py::list const& sample_row_keys,
+                                int num_workers, int worker_id) {
+  int len = sample_row_keys.size() + 1;
+  if (worker_id >= len) {
+    return cbt::RowRange::Empty();
+  }
+  // get the subset of sample row keys
+  std::string start_key;
+  std::string end_key = std::string("\0", 1);
+  if (worker_id > 0) {  // nie jest pierwszy
+    int start_key_index = get_worker_start_index(len, num_workers, worker_id);
+    start_key = sample_row_keys[start_key_index].cast<std::string>();
+  }
+  if (worker_id < len - 1) {  // nie jest ostatni
+    int end_key_index =
+        get_worker_start_index(len, num_workers, worker_id + 1);
+    end_key = sample_row_keys[end_key_index].cast<std::string>();
+  }
+  cbt::RowRange range = cbt::RowRange::Range(start_key, end_key);
+
+  row_set.Intersect(range);
+  return row_set;
+}
+
+
 class BigtableDatasetIterator {
  public:
   BigtableDatasetIterator(py::object const& client,
                           std::string const& table_id,
                           std::optional<std::string> const& app_profile_id,
-                          py::list const& /*sample_row_keys*/,
+                          py::list const& sample_row_keys,
                           py::list const& columns, py::object cell_type,
                           cbt::RowSet const& row_set,
-                          std::string const& versions, int /*num_workers*/,
-                          int /*worker_id*/)
+                          std::string const& versions, int num_workers,
+                          int worker_id)
       : column_map_(CreateColumnMap(columns)),
         data_client_(CreateDataClient(client)),
         cell_type_(
             torch::python::detail::py_object_to_dtype(std::move(cell_type))),
         reader_(CreateTable(this->data_client_, table_id, app_profile_id)
-                    ->ReadRows(row_set, cbt::Filter::Chain(
+                    ->ReadRows(CreateRowSet(row_set, sample_row_keys, num_workers,
+                                            worker_id), cbt::Filter::Chain(
                                             CreateColumnsFilter(column_map_),
                                             cbt::Filter::Latest(1)))),
         it_(this->reader_.begin()) {
