@@ -36,5 +36,5 @@ jobs:
     
     - name: Run tests
 #       run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_devel /opt/pytorch/ci/check.sh
-      run: echo "Running tests!"
+      run: echo "Running tests"
 
