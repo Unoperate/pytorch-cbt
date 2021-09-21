@@ -105,7 +105,7 @@ print("Split dataset")
 start_date_training = datetime.datetime.strptime("2018-04-01", "%Y-%m-%d")
 
 (train_df, test_df)=get_train_test_set(transactions_df,start_date_training,
-                                       delta_train=150,delta_delay=16,delta_test=16)
+                                       delta_train=50,delta_delay=16,delta_test=16)
 
 
 print("training set contains {0} transactions, {1} fraudulent".format(len(train_df),train_df.TX_FRAUD.sum()))
@@ -114,7 +114,8 @@ print("test set contains {0} transactions, {1} fraudulent".format(len(test_df),t
 print("test", test_df.shape)
 
 print("Seed bigtable")
-client = pbt.BigtableClient("unoperate-test", "test-instance-id", endpoint="")
+os.environ["BIGTABLE_EMULATOR_HOST"] = "172.17.0.1:8086"
+client = pbt.BigtableClient("unoperate-test", "172.17.0.1:8086", endpoint="")
 train_table = client.get_table("train")
 
 BATCH_SIZE = 1000
@@ -135,6 +136,9 @@ for i,idx in enumerate(range(0,X_train.shape[0],BATCH_SIZE)):
   train_table.write_tensor(batch_x, ["cf1:" + column for column in input_features], row_keys)
   train_table.write_tensor(batch_y.reshape(-1,1), ["cf1:"+output_feature], row_keys)
 
+
+print("saving train data locally")
+train_df.to_csv('train_df.csv', index=False)
 
 print("saving test data locally")
 test_df.to_csv('test_df.csv', index=False)

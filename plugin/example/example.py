@@ -1,6 +1,9 @@
+import os
 import torch
 import pytorch_bigtable as pbt
 import pandas as pd
+from sklearn.metrics import recall_score, roc_auc_score, balanced_accuracy_score,precision_recall_curve, average_precision_score
+from matplotlib import pyplot as plt
 
 
 class CreditCardDataset(torch.utils.data.Dataset):
@@ -29,12 +32,12 @@ input_features=['TX_AMOUNT','TX_DURING_WEEKEND', 'TX_DURING_NIGHT', 'CUSTOMER_ID
                 'TERMINAL_ID_RISK_30DAY_WINDOW']
 
 def create_model():
-  d_in, d_h1, d_h2, d_out = len(input_features), len(input_features), len(input_features)//2, 1
+  d_in, d_h1, d_h2, d_out = len(input_features), len(input_features), len(input_features), 1
   nn_model = torch.nn.Sequential(
     torch.nn.Linear(d_in, d_h1),
-    torch.nn.Sigmoid(),
+    torch.nn.ReLU(),
     torch.nn.Linear(d_h1, d_h2),
-    torch.nn.Sigmoid(),
+    torch.nn.ReLU(),
     torch.nn.Linear(d_h2, d_out),
     torch.nn.Sigmoid(),
   )
@@ -46,43 +49,82 @@ def init_weights(m):
     torch.nn.init.xavier_uniform_(m.weight)
     m.bias.data.fill_(0.1)
 
-def train_model(model, loader, optimizer, max_epochs=50):
+def train_model_bt(model, loader, optimizer, max_epochs=50):
   torch.manual_seed(66543)
   loss_fn = torch.nn.BCELoss()
   model.train()
   model.apply(init_weights)
-  total_loss = 0
   for epoch in range(1, max_epochs+1):
+    total_loss = 0
     for i, data in enumerate(loader):
       X, y = data[:,:-1], data[:,-1]
+      print("training on batch ", y.reshape(-1).sum(), '/', y.shape[0])
       y_pred = model(X)
       loss = loss_fn(y_pred.reshape(-1), y)
       total_loss += loss.item()
       loss.backward()
       optimizer.step()
       optimizer.zero_grad()
-      if i % 100 == 0:
+      if i % 10 == 0:
         print('at iter {}, loss={}'.format(i, loss.item()))
     print('At epoch {}, loss={}'.format(epoch, total_loss))
-  print('Final loss={}'.format(total_loss))
   return
 
-def eval_model(model, eval_set, batch_size):
+def train_model(model, loader, optimizer, max_epochs=50):
+  torch.manual_seed(66543)
+  loss_fn = torch.nn.BCELoss()
+  model.train()
+  model.apply(init_weights)
+  for epoch in range(1, max_epochs+1):
+    total_loss = 0
+
+    for i, data in enumerate(loader, 0):
+      X, y = data
+      # print("training on batch ", y.reshape(-1).sum(), '/', y.shape[0])
+      y_pred = model(X)
+      loss = loss_fn(y_pred.reshape(-1), y)
+      total_loss += loss.item()
+      loss.backward()
+      optimizer.step()
+      optimizer.zero_grad()
+      if i % 10 == 0:
+        print('at iter {}, loss={}'.format(i, loss.item()))
+    print('At epoch {}, loss={}'.format(epoch, total_loss))
+  return
+
+def eval_model(model, eval_set, batch_size, output="out.png"):
   model.eval()
   loader = torch.utils.data.DataLoader(eval_set, batch_size)
-  correct, total = 0, 0
   with torch.no_grad():
+    correct, total = 0, 0
+    y_all = None
+    y_pred_all = None
     for i, data in enumerate(loader, 0):
       X, y = data
       y_pred = model(X)
-      correct += (y_pred > 0.5 == y).sum()
-      total += y.shape[0]
+      if i == 0:
+        y_all = y
+        y_pred_all = y_pred
+      else:
+        y_all = torch.cat((y_all, y), 0)
+        y_pred_all = torch.cat((y_pred_all, y_pred), 0)
 
-  print('test accuracy {}/{}  {}%'.format(correct, total, correct/total * 100))
+    print("roc_auc score:", roc_auc_score(y_all, y_pred_all))
+    print("recall score:", recall_score(y_all, (y_pred_all > 0.5).long() ))
+    print("average precision score:", average_precision_score(y_all, y_pred_all))
+    precision, recall, thresholds = precision_recall_curve(y_all, y_pred_all)
+    plt.figure()
+    plt.step(recall, precision, alpha=0.3, color='b')
+    plt.fill_between(recall, precision, alpha=0.3, color='b')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.savefig(output, dpi=300, format='png')
 
 if __name__ == '__main__':
   print("connecting to BigTable")
-  client = pbt.BigtableClient("unoperate-test", "test-instance-id", endpoint="")
+  os.environ["BIGTABLE_EMULATOR_HOST"] = "172.17.0.1:8086"
+  client = pbt.BigtableClient("unoperate-test", "172.17.0.1:8086", endpoint="")
+
   train_table = client.get_table("train")
 
   print("creating train set")
@@ -91,6 +133,9 @@ if __name__ == '__main__':
     ["cf1:" + column for column in input_features] + ["cf1:"+output_feature],
     pbt.row_set.from_rows_or_ranges(pbt.row_range.infinite()))
 
+  # print("creating train set")
+  # train_df = pd.read_csv("train_df.csv", parse_dates=['TX_DATETIME'])
+  # train_set = CreditCardDataset(train_df[input_features], train_df[output_feature])
 
   print("creating test set")
   test_df = pd.read_csv("test_df.csv", parse_dates=['TX_DATETIME'])
@@ -98,16 +143,26 @@ if __name__ == '__main__':
 
   print("creating a model")
   model = create_model()
-  learning_rate = 0.002
-  batch_size=1000
+  learning_rate = 2e-3
+  batch_size=10000
 
   loader = torch.utils.data.DataLoader(train_set, batch_size)
-  optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
+  optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+
+  print("initial testing")
+  eval_model(model=model, eval_set=test_set, batch_size=batch_size, output="before.png")
 
   print("training")
-  train_model(model=model, loader=loader, optimizer=optimizer,  max_epochs=10)
+  # train_model(model=model, loader=loader, optimizer=optimizer,  max_epochs=20)
+  train_model_bt(model=model, loader=loader, optimizer=optimizer,  max_epochs=10)
 
-  print("testing")
-  eval_model(model=model, eval_set=test_set, batch_size=batch_size)
+  torch.save(model.state_dict(), "model.backup")
+  model.load_state_dict(torch.load("model.backup"))
+
+
+
+  print("testing after training")
+  eval_model(model=model, eval_set=test_set, batch_size=batch_size, output="after.png")
 
 
