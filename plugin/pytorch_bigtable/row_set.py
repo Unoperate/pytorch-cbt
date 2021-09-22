@@ -1,3 +1,4 @@
+"""Module implementing basic functions for obtaining BigTable RowSets"""
 import pbt_C
 from typing import Union
 
@@ -21,8 +22,6 @@ def from_rows_or_ranges(*args: Union[str, pbt_C.RowRange]) -> pbt_C.RowSet:
     row_set.append(row_or_range)
 
   return row_set
-
-
 
 
 def intersect(row_set, row_range: pbt_C.RowRange) -> pbt_C.RowSet:
