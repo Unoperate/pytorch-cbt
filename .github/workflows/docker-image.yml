@@ -1,4 +1,4 @@
-# Copyright 2010 Google LLC
+# Copyright 2021 Google LLC
 name: Docker Image CI
 
 on:
