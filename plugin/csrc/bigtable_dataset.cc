@@ -293,4 +293,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   py::class_<cbt::Filter>(m, "Filter").def("__repr__", &PrintFilter);
 
   m.def("latest_version_filter", &cbt::Filter::Latest, py::arg("n"));
+  m.def("timestamp_range_micros", &cbt::Filter::TimestampRangeMicros,
+        py::arg("start"), py::arg("end"));
 }

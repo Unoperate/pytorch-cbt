@@ -115,7 +115,7 @@ class BigtableTable:
 
   def read_rows(self, cell_type: torch.dtype, columns: List[str],
                 row_set: pbt_C.RowSet,
-                versions: str = "latest") -> torch.utils.data.IterableDataset:
+                versions: pbt_C.Filter = filters.latest()) -> torch.utils.data.IterableDataset:
     """Returns a `CloudBigtableIterableDataset` object.
 
     Args:
@@ -124,10 +124,8 @@ class BigtableTable:
         columns (List[str]): the list of columns to read from; the order on
             this list will determine the order in the output tensors
         row_set (RowSet): set of rows to read.
-        versions (str):
-            specifies which version should be retrieved. Defaults to "latest"
-                "latest": most recent value is returned
-                "oldest": the oldest present value is returned.
+        versions (Filter):
+            specifies which version should be retrieved. Defaults to latest.
     """
 
     return _BigtableDataset(self, columns, cell_type, row_set, versions)
