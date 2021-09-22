@@ -1,3 +1,4 @@
+"""Module containing core functionality of pytorch bigtable dataset"""
 import torch
 import pbt_C
 from typing import List
@@ -15,7 +16,7 @@ class ServiceAccountJson(BigtableCredentials):
 
   @classmethod
   def read_from_file(cls, path: str):
-    with open(path, 'r') as f:
+    with open(path, "r", encoding="UTF-8") as f:
       return cls(f.read())
 
 
@@ -29,7 +30,7 @@ class BigtableClient:
 
   def __init__(self, project_id: str, instance_id: str,
                credentials: BigtableCredentials = None,
-               endpoint: str = "", ) -> None:
+               endpoint: str = None, ) -> None:
     """Creates a BigtableClient object storing details about the connection.
 
     Args:
@@ -134,7 +135,6 @@ class BigtableTable:
 
 class _BigtableDataset(torch.utils.data.IterableDataset):
   """Dataset that handles iterating over BigTable."""
-
   def __init__(self, table: BigtableTable, columns: List[str],
                cell_type: torch.dtype, row_set: pbt_C.RowSet,
                versions: str) -> None:
