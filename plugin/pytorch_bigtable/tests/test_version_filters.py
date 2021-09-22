@@ -1,3 +1,7 @@
+# pylint: disable=C0114
+# pylint: disable=C0115
+# pylint: disable=W0212
+# pylint: disable=R1732
 from datetime import datetime
 from unittest import TestCase
 from pytorch_bigtable import version_filters as filters
