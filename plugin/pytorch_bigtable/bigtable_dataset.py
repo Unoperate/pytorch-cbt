@@ -1,4 +1,3 @@
-"""Module containing core functionality of pytorch bigtable dataset"""
 import torch
 import pbt_C
 from typing import List
@@ -16,7 +15,7 @@ class ServiceAccountJson(BigtableCredentials):
 
   @classmethod
   def read_from_file(cls, path: str):
-    with open(path, "r", encoding="UTF-8") as f:
+    with open(path, 'r') as f:
       return cls(f.read())
 
 
@@ -30,8 +29,8 @@ class BigtableClient:
 
   def __init__(self, project_id: str, instance_id: str,
                credentials: BigtableCredentials = None,
-               endpoint: str = None, ) -> None:
-    """Creates a BigtableClient to start.
+               endpoint: str = "", ) -> None:
+    """Creates a BigtableClient object storing details about the connection.
 
     Args:
         project_id (str): The assigned project ID of the project.
@@ -45,8 +44,10 @@ class BigtableClient:
         endpoint (str): A custom URL, where Cloud Bigtable is available. If
             set to None, the default will be used.
     """
-    self.impl = pbt_C.create_data_client(project_id, instance_id, credentials,
-                                         endpoint)
+    self._project_id = project_id
+    self._instance_id = instance_id
+    self._credentials = credentials
+    self._endpoint = endpoint
 
   def get_table(self, table_id: str, app_profile_id: str = None):
     """Creates an instance of BigtableTable
@@ -81,8 +82,7 @@ class BigtableTable:
     self._client = client
     self._table_id = table_id
     self._app_profile_id = app_profile_id
-    self._sample_row_keys = pbt_C.sample_row_keys(self._client.impl,
-                                                  self._table_id,
+    self._sample_row_keys = pbt_C.sample_row_keys(self._client, self._table_id,
                                                   self._app_profile_id)
 
   def write_tensor(self, tensor: torch.Tensor, columns: List[str],
@@ -109,7 +109,7 @@ class BigtableTable:
         raise ValueError(f"`columns[{i}]` must be a string in format:"
                          " \"column_family:column_name\"")
 
-    pbt_C.write_tensor(self._client.impl, self._table_id, self._app_profile_id,
+    pbt_C.write_tensor(self._client, self._table_id, self._app_profile_id,
                        tensor, columns, row_keys)
 
   def read_rows(self, cell_type: torch.dtype, columns: List[str],
@@ -134,6 +134,7 @@ class BigtableTable:
 
 class _BigtableDataset(torch.utils.data.IterableDataset):
   """Dataset that handles iterating over BigTable."""
+
   def __init__(self, table: BigtableTable, columns: List[str],
                cell_type: torch.dtype, row_set: pbt_C.RowSet,
                versions: str) -> None:
@@ -159,9 +160,9 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
 
     worker_info = torch.utils.data.get_worker_info()
     num_workers = worker_info.num_workers if worker_info is not None else 1
-    worker_id = worker_info.worker_id if worker_info is not None else 0
+    worker_id = worker_info.id if worker_info is not None else 0
 
-    return pbt_C.Iterator(self._table._client.impl, self._table._table_id,
+    return pbt_C.Iterator(self._table._client, self._table._table_id,
                           self._table._app_profile_id,
                           self._table._sample_row_keys, self._columns,
                           self._cell_type, self._row_set, self._versions,

@@ -74,6 +74,15 @@ std::pair<std::string, std::string> ColumnNameToPair(
   return pair;
 }
 
+std::shared_ptr<cbt::DataClient> CreateDataClient(
+    py::object const& client) {
+  auto project_id = client.attr("_project_id").cast<std::string>();
+  auto instance_id = client.attr("_instance_id").cast<std::string>();
+  google::cloud::Options options;
+  return cbt::CreateDefaultDataClient(std::move(project_id), std::move(instance_id),
+                                      cbt::ClientOptions(options));
+}
+
 std::unique_ptr<cbt::Table> CreateTable(
     std::shared_ptr<cbt::DataClient> const& data_client,
     std::string const& table_id,
@@ -83,9 +92,10 @@ std::unique_ptr<cbt::Table> CreateTable(
                         : std::make_unique<cbt::Table>(data_client, table_id);
 }
 
-py::list SampleRowKeys(std::shared_ptr<cbt::DataClient> const& data_client,
+py::list SampleRowKeys(py::object const& client,
                        std::string const& table_id,
                        std::optional<std::string> const& app_profile_id) {
+  std::shared_ptr<cbt::DataClient> data_client  = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
   auto maybe_sample_row_keys = table->SampleRows();
@@ -101,11 +111,12 @@ py::list SampleRowKeys(std::shared_ptr<cbt::DataClient> const& data_client,
   return res;
 }
 
-void WriteTensor(std::shared_ptr<cbt::DataClient> const& data_client,
+void WriteTensor(py::object const& client,
                  std::string const& table_id,
                  std::optional<std::string> const& app_profile_id,
                  torch::Tensor const& tensor, py::list const& columns,
                  py::list const& row) {
+  std::shared_ptr<cbt::DataClient> data_client  = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
   auto* tensor_ptr = static_cast<float*>(tensor.data_ptr());
@@ -127,7 +138,7 @@ void WriteTensor(std::shared_ptr<cbt::DataClient> const& data_client,
 
 class BigtableDatasetIterator {
  public:
-  BigtableDatasetIterator(std::shared_ptr<cbt::DataClient> const& data_client,
+  BigtableDatasetIterator(py::object const& client,
                           std::string const& table_id,
                           std::optional<std::string> const& app_profile_id,
                           py::list const& /*sample_row_keys*/,
@@ -136,9 +147,10 @@ class BigtableDatasetIterator {
                           std::string const& versions, int /*num_workers*/,
                           int /*worker_id*/)
       : column_map_(CreateColumnMap(columns)),
+        data_client_(CreateDataClient(client)),
         cell_type_(
             torch::python::detail::py_object_to_dtype(std::move(cell_type))),
-        reader_(CreateTable(data_client, table_id, app_profile_id)
+        reader_(CreateTable(this->data_client_, table_id, app_profile_id)
                     ->ReadRows(row_set, cbt::Filter::Chain(
                                             CreateColumnsFilter(column_map_),
                                             cbt::Filter::Latest(1)))),
@@ -179,18 +191,11 @@ class BigtableDatasetIterator {
   // Mapping between column names and their indices in tensors.  We're using a
   // regular map because unordered_map cannot hash a pair by default.
   std::map<std::pair<std::string, std::string>, size_t> column_map_;
+  std::shared_ptr<cbt::DataClient> data_client_;
   torch::Dtype cell_type_;
   cbt::RowReader reader_;
   cbt::v1::internal::RowReaderIterator it_;
 };
-
-std::shared_ptr<cbt::DataClient> CreateDataClient(
-    std::string const& project_id, std::string const& instance_id,
-    py::object const& /*credentials*/, std::string const& /*endpoint*/) {
-  google::cloud::Options options;
-  return cbt::CreateDefaultDataClient(project_id, instance_id,
-                                      cbt::ClientOptions(options));
-}
 
 std::string PrintRowRange(cbt::RowRange const& row_range) {
   std::string res;
@@ -220,7 +225,7 @@ void AppendRowOrRange(cbt::RowSet& row_set, py::args const& args) {
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("sample_row_keys", &SampleRowKeys, "get sample row_keys from BigTable",
-        py::arg("data_client"), py::arg("table_id"),
+        py::arg("client"), py::arg("table_id"),
         py::arg("application_profile_id") = py::none());
 
   m.def("write_tensor", &WriteTensor, "write tensor to BigTable",
@@ -229,7 +234,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         py::arg("columns"), py::arg("row_keys"));
 
   py::class_<BigtableDatasetIterator>(m, "Iterator")
-      .def(py::init<std::shared_ptr<cbt::DataClient>, std::string,
+      .def(py::init<py::object, std::string,
                     std::optional<std::string>, py::list, py::list, py::object,
                     cbt::RowSet const&, std::string, int, int>(),
            "get BigTable ReadRows iterator", py::arg("client"),
@@ -242,14 +247,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
              return it;
            })
       .def("__next__", &BigtableDatasetIterator::next);
-
-  // NOLINTNEXTLINE(bugprone-unused-raii)
-  py::class_<cbt::DataClient, std::shared_ptr<cbt::DataClient>>(
-      m, "BigtableDataClient");
-
-  m.def("create_data_client", &CreateDataClient, "Create a cbt::DataClient",
-        py::arg("project_id"), py::arg("instance_id"), py::arg("credentials"),
-        py::arg("endpoint"));
 
   // NOLINTNEXTLINE(bugprone-unused-raii)
   py::class_<cbt::RowRange>(m, "RowRange").def("__repr__", &PrintRowRange);
