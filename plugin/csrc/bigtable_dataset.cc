@@ -133,7 +133,7 @@ class BigtableDatasetIterator {
                           py::list const& /*sample_row_keys*/,
                           py::list const& columns, py::object cell_type,
                           cbt::RowSet const& row_set,
-                          std::string const& versions, int /*num_workers*/,
+                          cbt::Filter const& versions, int /*num_workers*/,
                           int /*worker_id*/)
       : column_map_(CreateColumnMap(columns)),
         cell_type_(
@@ -141,11 +141,8 @@ class BigtableDatasetIterator {
         reader_(CreateTable(data_client, table_id, app_profile_id)
                     ->ReadRows(row_set, cbt::Filter::Chain(
                                             CreateColumnsFilter(column_map_),
-                                            cbt::Filter::Latest(1)))),
-        it_(this->reader_.begin()) {
-    if (versions != "latest")
-      throw std::invalid_argument("only `version`='latest' is supported.");
-  }
+                                            versions, cbt::Filter::Latest(1)))),
+        it_(this->reader_.begin()) {}
 
   torch::Tensor next() {
     if (it_ == reader_.end()) throw py::stop_iteration();
@@ -204,6 +201,12 @@ std::string PrintRowSet(cbt::RowSet const& row_set) {
   return res;
 }
 
+std::string PrintFilter(cbt::Filter const& filter) {
+  std::string res;
+  google::protobuf::TextFormat::PrintToString(filter.as_proto(), &res);
+  return res;
+}
+
 void AppendRowOrRange(cbt::RowSet& row_set, py::args const& args) {
   for (auto const& arg : args) {
     if (py::isinstance<cbt::RowRange>(arg))
@@ -231,7 +234,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   py::class_<BigtableDatasetIterator>(m, "Iterator")
       .def(py::init<std::shared_ptr<cbt::DataClient>, std::string,
                     std::optional<std::string>, py::list, py::list, py::object,
-                    cbt::RowSet const&, std::string, int, int>(),
+                    cbt::RowSet const&, cbt::Filter, int, int>(),
            "get BigTable ReadRows iterator", py::arg("client"),
            py::arg("table_id"), py::arg("app_profile_id") = py::none(),
            py::arg("sample_row_keys"), py::arg("columns"), py::arg("cell_type"),
@@ -286,4 +289,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
       .def("append", &AppendRowOrRange)
       .def("intersect", &cbt::RowSet::Intersect, py::arg("row_range"))
       .def("__repr__", &PrintRowSet);
+
+  py::class_<cbt::Filter>(m, "Filter").def("__repr__", &PrintFilter);
+
+  m.def("latest_version_filter", &cbt::Filter::Latest, py::arg("n"));
 }

@@ -2,6 +2,7 @@
 import torch
 import pbt_C
 from typing import List
+import pytorch_bigtable.version_filters as filters
 
 
 class BigtableCredentials:
@@ -136,7 +137,7 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
   """Dataset that handles iterating over BigTable."""
   def __init__(self, table: BigtableTable, columns: List[str],
                cell_type: torch.dtype, row_set: pbt_C.RowSet,
-               versions: str) -> None:
+               versions: pbt_C.Filter = filters.latest()) -> None:
     super(_BigtableDataset).__init__()
 
     self._table = table
