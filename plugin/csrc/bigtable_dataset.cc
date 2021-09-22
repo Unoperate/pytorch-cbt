@@ -143,12 +143,20 @@ int GetWorkerStartIndex(int len, int num_workers, int worker_id) {
          std::min(additional_rows, workers_before);
 }
 
-cbt::RowSet CreateRowSet(cbt::RowSet row_set, py::list const& sample_row_keys,
-                         int num_workers, int worker_id) {
+cbt::RowSet CreateRowSet(cbt::RowSet const& row_set,
+                         py::list const& sample_row_keys, int num_workers,
+                         int worker_id) {
+  if (sample_row_keys.empty()) {
+    if (worker_id == 0) {
+      return cbt::RowRange::InfiniteRange();
+    }
+    return cbt::RowRange::Empty();
+  }
+
   std::vector<std::pair<std::string, std::string>> filtered;
   std::string start_key;
-  for (auto& tuple : sample_row_keys) {
-    auto end_key = tuple[0].cast<std::string>();
+  for (py::handle hand : sample_row_keys) {
+    auto end_key = hand.cast<py::tuple>()[0].cast<std::string>();
     // check if intersects
     auto range = cbt::RowRange::Range(start_key, end_key);
     if (!row_set.Intersect(range).IsEmpty()) {
@@ -163,8 +171,8 @@ cbt::RowSet CreateRowSet(cbt::RowSet row_set, py::list const& sample_row_keys,
     filtered.emplace_back(start_key, "");
   }
   int start = GetWorkerStartIndex(filtered.size(), num_workers, worker_id);
-  int end = GetWorkerStartIndex(filtered.size(), num_workers, worker_id + 1);
-
+  int end =
+      GetWorkerStartIndex(filtered.size(), num_workers, worker_id + 1) - 1;
   if (start >= end) return cbt::RowRange::Empty();
 
   start_key = filtered.at(start).first;
