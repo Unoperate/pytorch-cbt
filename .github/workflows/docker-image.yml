@@ -1,3 +1,4 @@
+# Copyright 2010 Google LLC
 name: Docker Image CI
 
 on:
