@@ -1,7 +1,9 @@
+# disable module docstring for tests
 # pylint: disable=C0114
+# disable class docstring for tests
 # pylint: disable=C0115
+# disable warning for access to protected members
 # pylint: disable=W0212
-# pylint: disable=R1732
 from unittest import TestCase
 from tempfile import NamedTemporaryFile
 from pytorch_bigtable.bigtable_dataset import ServiceAccountJson

@@ -1,6 +1,10 @@
+# disable module docstring for tests
 # pylint: disable=C0114
+# disable class docstring for tests
 # pylint: disable=C0115
+# disable warning for access to protected members
 # pylint: disable=W0212
+# disable warning for not using 'with' for resource-allocating operations
 # pylint: disable=R1732
 import os
 import subprocess

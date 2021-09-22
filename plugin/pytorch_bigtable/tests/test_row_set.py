@@ -1,7 +1,7 @@
+# disable module docstring for tests
 # pylint: disable=C0114
+# disable class docstring for tests
 # pylint: disable=C0115
-# pylint: disable=W0212
-# pylint: disable=R1732
 from unittest import TestCase
 from pytorch_bigtable import row_set, row_range
 
