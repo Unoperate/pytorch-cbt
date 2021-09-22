@@ -146,34 +146,45 @@ int GetWorkerStartIndex(int len, int num_workers, int worker_id) {
 cbt::RowSet CreateRowSet(cbt::RowSet const& row_set,
                          py::list const& sample_row_keys, int num_workers,
                          int worker_id) {
-  if (sample_row_keys.empty()) {
+  if (sample_row_keys.empty() || row_set.IsEmpty()) {
     if (worker_id == 0) {
-      return cbt::RowRange::InfiniteRange();
+      return row_set;
     }
     return cbt::RowRange::Empty();
   }
-
   std::vector<std::pair<std::string, std::string>> filtered;
   std::string start_key;
   for (py::handle hand : sample_row_keys) {
     auto end_key = hand.cast<py::tuple>()[0].cast<std::string>();
     // check if intersects
     auto range = cbt::RowRange::Range(start_key, end_key);
+    std::cout << "checking range ['" << start_key << "','" << end_key << "']\n";
     if (!row_set.Intersect(range).IsEmpty()) {
+      std::cout << "INTERSECTS!\n";
       // save if intersects
       filtered.emplace_back(start_key, end_key);
     }
     start_key = std::move(end_key);
   }
+
   // if last range was not infinite append
-  if (!filtered.back().second.empty()) {
-    start_key = filtered.back().second;
-    filtered.emplace_back(start_key, "");
+  if (filtered.empty() || !filtered.back().second.empty()) {
+    if(!filtered.empty()){
+      start_key = filtered.back().second;
+    }
+    auto range = cbt::RowRange::Range(start_key, "");
+    std::cout << "checking range ['" << start_key << "','']\n";
+    if (!row_set.Intersect(range).IsEmpty()) {
+      std::cout << "INTERSECTS!\n";
+      // save if intersects
+      filtered.emplace_back(start_key, "");
+    }
   }
+  std::cout << "produced " << filtered.size() << "chunks!\n";
   int start = GetWorkerStartIndex(filtered.size(), num_workers, worker_id);
   int end =
       GetWorkerStartIndex(filtered.size(), num_workers, worker_id + 1) - 1;
-  if (start >= end) return cbt::RowRange::Empty();
+  if (start > end) return cbt::RowRange::Empty();
 
   start_key = filtered.at(start).first;
   std::string end_key = filtered.at(end).second;
@@ -328,6 +339,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
       .def(py::init<>())
       .def("append", &AppendRowOrRange)
       .def("intersect", &cbt::RowSet::Intersect, py::arg("row_range"))
+      .def("is_empty", &cbt::RowSet::IsEmpty)
       .def("__repr__", &PrintRowSet);
 
   m.def("get_worker_start_index", &GetWorkerStartIndex,
