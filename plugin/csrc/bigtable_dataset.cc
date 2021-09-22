@@ -74,12 +74,12 @@ std::pair<std::string, std::string> ColumnNameToPair(
   return pair;
 }
 
-std::shared_ptr<cbt::DataClient> CreateDataClient(
-    py::object const& client) {
+std::shared_ptr<cbt::DataClient> CreateDataClient(py::object const& client) {
   auto project_id = client.attr("_project_id").cast<std::string>();
   auto instance_id = client.attr("_instance_id").cast<std::string>();
   google::cloud::Options options;
-  return cbt::CreateDefaultDataClient(std::move(project_id), std::move(instance_id),
+  return cbt::CreateDefaultDataClient(std::move(project_id),
+                                      std::move(instance_id),
                                       cbt::ClientOptions(options));
 }
 
@@ -92,10 +92,9 @@ std::unique_ptr<cbt::Table> CreateTable(
                         : std::make_unique<cbt::Table>(data_client, table_id);
 }
 
-py::list SampleRowKeys(py::object const& client,
-                       std::string const& table_id,
+py::list SampleRowKeys(py::object const& client, std::string const& table_id,
                        std::optional<std::string> const& app_profile_id) {
-  std::shared_ptr<cbt::DataClient> data_client  = CreateDataClient(client);
+  std::shared_ptr<cbt::DataClient> data_client = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
   auto maybe_sample_row_keys = table->SampleRows();
@@ -111,8 +110,7 @@ py::list SampleRowKeys(py::object const& client,
   return res;
 }
 
-void WriteTensor(py::object const& client,
-                 std::string const& table_id,
+void WriteTensor(py::object const& client, std::string const& table_id,
                  std::optional<std::string> const& app_profile_id,
                  torch::Tensor const& tensor, py::list const& columns,
                  py::list const& row) {
@@ -136,7 +134,7 @@ void WriteTensor(py::object const& client,
   }
 }
 
-int get_worker_start_index(int len, int num_workers, int worker_id) {
+int GetWorkerStartIndex(int len, int num_workers, int worker_id) {
   if (len <= num_workers) return std::min(worker_id, len);
   int rows_per_worker = len / num_workers;
   int additional_rows = len % num_workers;
@@ -145,30 +143,29 @@ int get_worker_start_index(int len, int num_workers, int worker_id) {
          std::min(additional_rows, workers_before);
 }
 
-cbt::RowSet CreateRowSet(cbt::RowSet row_set,
-                                py::list const& sample_row_keys,
-                                int num_workers, int worker_id) {
-  std::vector<std::pair<std::string,std::string>> filtered;
+cbt::RowSet CreateRowSet(cbt::RowSet row_set, py::list const& sample_row_keys,
+                         int num_workers, int worker_id) {
+  std::vector<std::pair<std::string, std::string>> filtered;
   std::string start_key;
-  for(auto & tuple : sample_row_keys){
+  for (auto& tuple : sample_row_keys) {
     auto end_key = tuple[0].cast<std::string>();
     // check if intersects
     auto range = cbt::RowRange::Range(start_key, end_key);
-    if(!row_set.Intersect(range).IsEmpty()){
+    if (!row_set.Intersect(range).IsEmpty()) {
       // save if intersects
       filtered.emplace_back(start_key, end_key);
     }
     start_key = std::move(end_key);
   }
   // if last range was not infinite append
-  if(!filtered.back().second.empty()){
+  if (!filtered.back().second.empty()) {
     start_key = filtered.back().second;
     filtered.emplace_back(start_key, "");
   }
-  int start = get_worker_start_index(filtered.size(), num_workers, worker_id);
-  int end = get_worker_start_index(filtered.size(), num_workers, worker_id + 1);
+  int start = GetWorkerStartIndex(filtered.size(), num_workers, worker_id);
+  int end = GetWorkerStartIndex(filtered.size(), num_workers, worker_id + 1);
 
-  if(start >= end) return cbt::RowRange::Empty();
+  if (start >= end) return cbt::RowRange::Empty();
 
   start_key = filtered.at(start).first;
   std::string end_key = filtered.at(end).second;
@@ -176,11 +173,9 @@ cbt::RowSet CreateRowSet(cbt::RowSet row_set,
   return row_set.Intersect(cbt::RowRange::Range(start_key, end_key));
 }
 
-
 class BigtableDatasetIterator {
  public:
-  BigtableDatasetIterator(py::object const& client,
-                          std::string const& table_id,
+  BigtableDatasetIterator(py::object const& client, std::string const& table_id,
                           std::optional<std::string> const& app_profile_id,
                           py::list const& sample_row_keys,
                           py::list const& columns, py::object cell_type,
@@ -191,11 +186,12 @@ class BigtableDatasetIterator {
         data_client_(CreateDataClient(client)),
         cell_type_(
             torch::python::detail::py_object_to_dtype(std::move(cell_type))),
-        reader_(CreateTable(this->data_client_, table_id, app_profile_id)
-                    ->ReadRows(CreateRowSet(row_set, sample_row_keys, num_workers,
-                                            worker_id), cbt::Filter::Chain(
-                                            CreateColumnsFilter(column_map_),
-                                            cbt::Filter::Latest(1)))),
+        reader_(
+            CreateTable(this->data_client_, table_id, app_profile_id)
+                ->ReadRows(CreateRowSet(row_set, sample_row_keys, num_workers,
+                                        worker_id),
+                           cbt::Filter::Chain(CreateColumnsFilter(column_map_),
+                                              cbt::Filter::Latest(1)))),
         it_(this->reader_.begin()) {
     if (versions != "latest")
       throw std::invalid_argument("only `version`='latest' is supported.");
@@ -276,9 +272,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         py::arg("columns"), py::arg("row_keys"));
 
   py::class_<BigtableDatasetIterator>(m, "Iterator")
-      .def(py::init<py::object, std::string,
-                    std::optional<std::string>, py::list, py::list, py::object,
-                    cbt::RowSet const&, std::string, int, int>(),
+      .def(py::init<py::object, std::string, std::optional<std::string>,
+                    py::list, py::list, py::object, cbt::RowSet const&,
+                    std::string, int, int>(),
            "get BigTable ReadRows iterator", py::arg("client"),
            py::arg("table_id"), py::arg("app_profile_id") = py::none(),
            py::arg("sample_row_keys"), py::arg("columns"), py::arg("cell_type"),
@@ -325,4 +321,15 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
       .def("append", &AppendRowOrRange)
       .def("intersect", &cbt::RowSet::Intersect, py::arg("row_range"))
       .def("__repr__", &PrintRowSet);
+
+  m.def("get_worker_start_index", &GetWorkerStartIndex,
+        "Utility function for dividing a part of a list of length `len` "
+        "between `num_workers`.",
+        py::arg("len"), py::arg("num_workers"), py::arg("worker_id"));
+
+  m.def("create_row_set", &CreateRowSet,
+        "Utility function for getting a row_set intersected with this worker's "
+        "chunk of work.",
+        py::arg("row_set"), py::arg("sample_row_keys"), py::arg("num_workers"),
+        py::arg("worker_id"));
 }
