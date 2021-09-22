@@ -115,7 +115,8 @@ class BigtableTable:
 
   def read_rows(self, cell_type: torch.dtype, columns: List[str],
                 row_set: pbt_C.RowSet,
-                versions: pbt_C.Filter = filters.latest()) -> torch.utils.data.IterableDataset:
+                versions: pbt_C.Filter = filters.latest()) -> \
+      torch.utils.data.IterableDataset:
     """Returns a `CloudBigtableIterableDataset` object.
 
     Args:
@@ -133,6 +134,7 @@ class BigtableTable:
 
 class _BigtableDataset(torch.utils.data.IterableDataset):
   """Dataset that handles iterating over BigTable."""
+
   def __init__(self, table: BigtableTable, columns: List[str],
                cell_type: torch.dtype, row_set: pbt_C.RowSet,
                versions: pbt_C.Filter = filters.latest()) -> None:

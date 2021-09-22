@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# disable module docstring for tests
 # pylint: disable=C0114
+# disable class docstring for tests
 # pylint: disable=C0115
-# pylint: disable=W0212
-# pylint: disable=R1732
+
 from datetime import datetime
 from unittest import TestCase
 from pytorch_bigtable import version_filters as filters
