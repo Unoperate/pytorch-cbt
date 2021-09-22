@@ -143,6 +143,13 @@ int GetWorkerStartIndex(int len, int num_workers, int worker_id) {
          std::min(additional_rows, workers_before);
 }
 
+bool RowSetIntersectsRange(cbt::RowSet const& row_set,
+                           std::string const& start_key,
+                           std::string const& end_key) {
+  auto range = cbt::RowRange::Range(start_key, end_key);
+  return !row_set.Intersect(range).IsEmpty();
+}
+
 cbt::RowSet CreateRowSet(cbt::RowSet const& row_set,
                          py::list const& sample_row_keys, int num_workers,
                          int worker_id) {
@@ -156,31 +163,20 @@ cbt::RowSet CreateRowSet(cbt::RowSet const& row_set,
   std::string start_key;
   for (py::handle hand : sample_row_keys) {
     auto end_key = hand.cast<py::tuple>()[0].cast<std::string>();
-    // check if intersects
-    auto range = cbt::RowRange::Range(start_key, end_key);
-    std::cout << "checking range ['" << start_key << "','" << end_key << "']\n";
-    if (!row_set.Intersect(range).IsEmpty()) {
-      std::cout << "INTERSECTS!\n";
-      // save if intersects
+    if (RowSetIntersectsRange(row_set, start_key, end_key)) {
       filtered.emplace_back(start_key, end_key);
     }
     start_key = std::move(end_key);
   }
 
-  // if last range was not infinite append
   if (filtered.empty() || !filtered.back().second.empty()) {
-    if(!filtered.empty()){
+    if (!filtered.empty()) {
       start_key = filtered.back().second;
     }
-    auto range = cbt::RowRange::Range(start_key, "");
-    std::cout << "checking range ['" << start_key << "','']\n";
-    if (!row_set.Intersect(range).IsEmpty()) {
-      std::cout << "INTERSECTS!\n";
-      // save if intersects
+    if (RowSetIntersectsRange(row_set, start_key, "")) {
       filtered.emplace_back(start_key, "");
     }
   }
-  std::cout << "produced " << filtered.size() << "chunks!\n";
   int start = GetWorkerStartIndex(filtered.size(), num_workers, worker_id);
   int end =
       GetWorkerStartIndex(filtered.size(), num_workers, worker_id + 1) - 1;
