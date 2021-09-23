@@ -30,17 +30,42 @@ def latest() -> pbt_C.Filter:
   return pbt_C.latest_version_filter(1)
 
 
-def timestamp_range_micros(start: Union[int, datetime],
-                           end: Union[int, datetime]) -> pbt_C.Filter:
+def timestamp_range(start: Union[int, float, datetime],
+                    end: Union[int, float, datetime]) -> pbt_C.Filter:
   """Create a filter passing all values which timestamp is
   from the specified range, exclusive at the start and inclusive at the end.
 
   Args:
-    start: The start of the row range (inclusive).
-    end: The end of the row range (exclusive).
+    start: The start of the row range (inclusive). This can be either a python
+    datetime or a number (int of float) representing seconds since epoch.
+    end: The end of the row range (exclusive). Same as start, this can be a
+    datetime or a number of seconds since epoch.
   Returns:
     pbt_C.Filter: Filter passing only values' versions from the specified range.
   """
-  start_timestamp = start if isinstance(start, int) else int(start.timestamp())
-  end_timestamp = end if isinstance(end, int) else int(end.timestamp())
+  if isinstance(start, datetime):
+    start_timestamp = int(start.timestamp() * 1e6)
+  else:
+    start_timestamp = int(start * 1e6)
+
+  if isinstance(end, datetime):
+    end_timestamp = int(end.timestamp() * 1e6)
+  else:
+    end_timestamp = int(end * 1e6)
+
   return pbt_C.timestamp_range_micros(start_timestamp, end_timestamp)
+
+
+def timestamp_range_micros(start_timestamp: Union[int, float],
+                           end_timestamp: Union[int, float]) -> pbt_C.Filter:
+  """Create a filter passing all values which timestamp is
+  from the specified range, exclusive at the start and inclusive at the end.
+
+  Args:
+    start_timestamp: The start of the row range (inclusive). It is a number (
+    int or float) representing number of microseconds since epoch.
+    end_timestamp: The end of the row range (exclusive).
+  Returns:
+    pbt_C.Filter: Filter passing only values' versions from the specified range.
+  """
+  return pbt_C.timestamp_range_micros(int(start_timestamp), int(end_timestamp))
