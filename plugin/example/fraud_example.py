@@ -1,4 +1,5 @@
 import os
+import argparse
 
 import torch.utils.data
 from tqdm import tqdm
@@ -72,7 +73,6 @@ def train_model(model, loader, optimizer, loss_fn, epochs=20):
       loss.backward()
       optimizer.step()
       optimizer.zero_grad()
-      print("max", y.long().max(), "min", y.long().min())
       total_prec += average_precision_score(y.long(), y_pred.detach())
       batch_counter += 1
 
@@ -104,21 +104,27 @@ def eval_model(model, loader, output="precision_recall.png"):
     plt.savefig(output, dpi=300, format='png')
 
 if __name__ == "__main__":
-  print("connecting to BigTable")
-  os.environ["BIGTABLE_EMULATOR_HOST"] = "172.17.0.1:8086"
-  client = pbt.BigtableClient("unoperate-test", "172.17.0.1:8086", endpoint="")
 
-  train_table = client.get_table("train")
+  parser = argparse.ArgumentParser("fraud_example.py")
+  parser.add_argument("-b", "--use_bigtable", help="specifies if training data is taken from bigtable database.", action='store_true')
+  args = parser.parse_args()
 
-  print("creating train set")
-  train_set = train_table.read_rows(
-    torch.float32,
-    ["cf1:" + column for column in input_features] + ["cf1:"+output_feature],
-    pbt.row_set.from_rows_or_ranges(pbt.row_range.infinite()))
+  if args.use_bigtable:
+    print("connecting to BigTable")
+    os.environ["BIGTABLE_EMULATOR_HOST"] = "172.17.0.1:8086"
+    client = pbt.BigtableClient("unoperate-test", "172.17.0.1:8086", endpoint="")
 
-  # print("creating train set")
-  # train_df = pd.read_csv("train_df.csv", parse_dates=['TX_DATETIME'])
-  # train_set = FraudDataset(train_df)
+    train_table = client.get_table("train")
+
+    print("creating train set")
+    train_set = train_table.read_rows(
+      torch.float32,
+      ["cf1:" + column for column in input_features] + ["cf1:"+output_feature],
+      pbt.row_set.from_rows_or_ranges(pbt.row_range.infinite()))
+  else:
+    print("creating train set")
+    train_df = pd.read_csv("train_df.csv", parse_dates=['TX_DATETIME'])
+    train_set = FraudDataset(train_df)
 
   print("creating test set")
   test_df = pd.read_csv("test_df.csv", parse_dates=['TX_DATETIME'])
