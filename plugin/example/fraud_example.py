@@ -1,3 +1,20 @@
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This example is based on data from:
+# https://github.com/Fraud-Detection-Handbook/simulated-data
+
 import os
 import argparse
 
@@ -50,8 +67,7 @@ def create_model():
   model = torch.nn.Sequential(torch.nn.Linear(layer_size, layer_size),
                               torch.nn.ReLU(),
                               torch.nn.Linear(layer_size, layer_size),
-                              torch.nn.ReLU(),
-                              torch.nn.Linear(layer_size, 1),
+                              torch.nn.ReLU(), torch.nn.Linear(layer_size, 1),
                               torch.nn.Sigmoid())
   return model
 
@@ -79,13 +95,14 @@ def train_model(model, loader, optimizer, loss_fn, epochs=20):
     tqdm.write(f"epoch-{epoch}: loss={total_loss}, avg_precision="
                f"{total_prec / batch_counter :.4f}")
 
+
 def eval_model(model, loader, output="precision_recall.png"):
   model.eval()
   with torch.no_grad():
     y_all = None
     y_pred_all = None
     for batch in loader:
-      X,y = batch
+      X, y = batch
       y_pred = model(X)
       if y_all is None:
         y_all = y
@@ -103,23 +120,28 @@ def eval_model(model, loader, output="precision_recall.png"):
     plt.ylabel('Precision')
     plt.savefig(output, dpi=300, format='png')
 
+
 if __name__ == "__main__":
 
   parser = argparse.ArgumentParser("fraud_example.py")
-  parser.add_argument("-b", "--use_bigtable", help="specifies if training data is taken from bigtable database.", action='store_true')
+  parser.add_argument("-b", "--use_bigtable",
+                      help="specifies if training data is taken from bigtable "
+                           "database.",
+                      action='store_true')
   args = parser.parse_args()
 
   if args.use_bigtable:
     print("connecting to BigTable")
     os.environ["BIGTABLE_EMULATOR_HOST"] = "172.17.0.1:8086"
-    client = pbt.BigtableClient("unoperate-test", "172.17.0.1:8086", endpoint="")
+    client = pbt.BigtableClient("unoperate-test", "172.17.0.1:8086",
+                                endpoint="")
 
     train_table = client.get_table("train")
 
     print("creating train set")
-    train_set = train_table.read_rows(
-      torch.float32,
-      ["cf1:" + column for column in input_features] + ["cf1:"+output_feature],
+    train_set = train_table.read_rows(torch.float32,
+      ["cf1:" + column for column in input_features] + [
+        "cf1:" + output_feature],
       pbt.row_set.from_rows_or_ranges(pbt.row_range.infinite()))
   else:
     print("creating train set")
@@ -133,7 +155,7 @@ if __name__ == "__main__":
   print("creating a model")
   model = create_model()
   learning_rate = 2e-3
-  batch_size=10000
+  batch_size = 10000
 
   train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size)
   optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -144,7 +166,8 @@ if __name__ == "__main__":
   eval_model(model=model, loader=test_loader, output="before.png")
 
   print("training")
-  train_model(model=model, loader=train_loader, optimizer=optimizer, loss_fn=torch.nn.BCELoss(), epochs=20)
+  train_model(model=model, loader=train_loader, optimizer=optimizer,
+              loss_fn=torch.nn.BCELoss(), epochs=20)
 
   torch.save(model.state_dict(), "model.backup")
   # model.load_state_dict(torch.load("model.backup"))
