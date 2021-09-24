@@ -102,8 +102,8 @@ class BigtableTable:
 
     """
 
-    if not len(columns) != tensor.shape[0]:
-      raise ValueError("`columns` must have the same length as tensor.shape[0]")
+    if len(columns) != tensor.shape[1]:
+      raise ValueError("`columns` must have the same length as tensor.shape[1]")
 
     for i, column_id in enumerate(columns):
       if len(column_id.split(":")) != 2:
