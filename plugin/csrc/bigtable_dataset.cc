@@ -134,7 +134,8 @@ void WriteTensor(py::object const& client, std::string const& table_id,
   }
 }
 
-int GetWorkerStartIndex(size_t num_tablets, size_t num_workers, size_t worker_id) {
+int GetWorkerStartIndex(size_t num_tablets, size_t num_workers,
+                        size_t worker_id) {
   if (num_tablets <= num_workers) return std::min(num_tablets, worker_id);
   size_t rows_per_worker = num_tablets / num_workers;
   size_t surplus_tablets = num_tablets % num_workers;
@@ -151,8 +152,8 @@ bool RowSetIntersectsRange(cbt::RowSet const& row_set,
 }
 
 cbt::RowSet ComputeRowSetForWorker(cbt::RowSet const& row_set,
-                         py::list const& sample_row_keys, int num_workers,
-                         int worker_id) {
+                                   py::list const& sample_row_keys,
+                                   int num_workers, int worker_id) {
   if (sample_row_keys.empty() || row_set.IsEmpty()) {
     if (worker_id == 0) {
       return row_set;
@@ -167,17 +168,23 @@ cbt::RowSet ComputeRowSetForWorker(cbt::RowSet const& row_set,
     tablets.emplace_back(start_key, end_key);
     start_key = std::move(end_key);
   }
-  if(!start_key.empty()){ tablets.emplace_back(start_key, ""); }
-  tablets.erase(std::remove_if (tablets.begin(), tablets.end(), [&row_set](std::pair<std::string,std::string> p){
-      return !RowSetIntersectsRange(row_set, p.first, p.second);
-  } ), tablets.end());
+  if (!start_key.empty()) {
+    tablets.emplace_back(start_key, "");
+  }
+  tablets.erase(std::remove_if(
+                    tablets.begin(), tablets.end(),
+                    [&row_set](std::pair<std::string, std::string> p) {
+                      return !RowSetIntersectsRange(row_set, p.first, p.second);
+                    }),
+                tablets.end());
 
-  size_t start_idx = GetWorkerStartIndex(tablets.size(), num_workers, worker_id);
+  size_t start_idx =
+      GetWorkerStartIndex(tablets.size(), num_workers, worker_id);
   size_t next_worker_start_idx =
       GetWorkerStartIndex(tablets.size(), num_workers, worker_id + 1);
 
   if (start_idx >= next_worker_start_idx) return cbt::RowRange::Empty();
-  size_t end_idx = next_worker_start_idx-1;
+  size_t end_idx = next_worker_start_idx - 1;
 
   start_key = tablets.at(start_idx).first;
   std::string end_key = tablets.at(end_idx).second;
@@ -200,8 +207,8 @@ class BigtableDatasetIterator {
             torch::python::detail::py_object_to_dtype(std::move(cell_type))),
         reader_(
             CreateTable(this->data_client_, table_id, app_profile_id)
-                ->ReadRows(ComputeRowSetForWorker(row_set, sample_row_keys, num_workers,
-                                        worker_id),
+                ->ReadRows(ComputeRowSetForWorker(row_set, sample_row_keys,
+                                                  num_workers, worker_id),
                            cbt::Filter::Chain(CreateColumnsFilter(column_map_),
                                               cbt::Filter::Latest(1)))),
         it_(this->reader_.begin()) {
