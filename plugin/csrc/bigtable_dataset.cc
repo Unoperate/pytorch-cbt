@@ -80,7 +80,7 @@ std::shared_ptr<cbt::DataClient> CreateDataClient(py::object const& client) {
   google::cloud::Options options;
   return cbt::CreateDefaultDataClient(std::move(project_id),
                                       std::move(instance_id),
-                                      cbt::ClientOptions(options));
+                                      cbt::ClientOptions(std::move(options)));
 }
 
 std::unique_ptr<cbt::Table> CreateTable(
@@ -134,13 +134,13 @@ void WriteTensor(py::object const& client, std::string const& table_id,
   }
 }
 
-int GetWorkerStartIndex(int len, int num_workers, int worker_id) {
-  if (len <= num_workers) return std::min(worker_id, len);
-  int rows_per_worker = len / num_workers;
-  int additional_rows = len % num_workers;
-  int workers_before = worker_id;
+int GetWorkerStartIndex(size_t num_tablets, size_t num_workers, size_t worker_id) {
+  if (num_tablets <= num_workers) return std::min(num_tablets, worker_id);
+  size_t rows_per_worker = num_tablets / num_workers;
+  size_t surplus_tablets = num_tablets % num_workers;
+  size_t workers_before = worker_id;
   return rows_per_worker * workers_before +
-         std::min(additional_rows, workers_before);
+         std::min(surplus_tablets, workers_before);
 }
 
 bool RowSetIntersectsRange(cbt::RowSet const& row_set,
@@ -150,7 +150,7 @@ bool RowSetIntersectsRange(cbt::RowSet const& row_set,
   return !row_set.Intersect(range).IsEmpty();
 }
 
-cbt::RowSet CreateRowSet(cbt::RowSet const& row_set,
+cbt::RowSet ComputeRowSetForWorker(cbt::RowSet const& row_set,
                          py::list const& sample_row_keys, int num_workers,
                          int worker_id) {
   if (sample_row_keys.empty() || row_set.IsEmpty()) {
@@ -159,31 +159,28 @@ cbt::RowSet CreateRowSet(cbt::RowSet const& row_set,
     }
     return cbt::RowRange::Empty();
   }
-  std::vector<std::pair<std::string, std::string>> filtered;
+  std::vector<std::pair<std::string, std::string>> tablets;
+
   std::string start_key;
-  for (py::handle hand : sample_row_keys) {
-    auto end_key = hand.cast<py::tuple>()[0].cast<std::string>();
-    if (RowSetIntersectsRange(row_set, start_key, end_key)) {
-      filtered.emplace_back(start_key, end_key);
-    }
+  for (py::handle end_key_handle : sample_row_keys) {
+    auto end_key = end_key_handle.cast<py::tuple>()[0].cast<std::string>();
+    tablets.emplace_back(start_key, end_key);
     start_key = std::move(end_key);
   }
+  if(!start_key.empty()){ tablets.emplace_back(start_key, ""); }
+  tablets.erase(std::remove_if (tablets.begin(), tablets.end(), [&row_set](std::pair<std::string,std::string> p){
+      return !RowSetIntersectsRange(row_set, p.first, p.second);
+  } ), tablets.end());
 
-  if (filtered.empty() || !filtered.back().second.empty()) {
-    if (!filtered.empty()) {
-      start_key = filtered.back().second;
-    }
-    if (RowSetIntersectsRange(row_set, start_key, "")) {
-      filtered.emplace_back(start_key, "");
-    }
-  }
-  int start = GetWorkerStartIndex(filtered.size(), num_workers, worker_id);
-  int end =
-      GetWorkerStartIndex(filtered.size(), num_workers, worker_id + 1) - 1;
-  if (start > end) return cbt::RowRange::Empty();
+  size_t start_idx = GetWorkerStartIndex(tablets.size(), num_workers, worker_id);
+  size_t next_worker_start_idx =
+      GetWorkerStartIndex(tablets.size(), num_workers, worker_id + 1);
 
-  start_key = filtered.at(start).first;
-  std::string end_key = filtered.at(end).second;
+  if (start_idx >= next_worker_start_idx) return cbt::RowRange::Empty();
+  size_t end_idx = next_worker_start_idx-1;
+
+  start_key = tablets.at(start_idx).first;
+  std::string end_key = tablets.at(end_idx).second;
 
   return row_set.Intersect(cbt::RowRange::Range(start_key, end_key));
 }
@@ -203,7 +200,7 @@ class BigtableDatasetIterator {
             torch::python::detail::py_object_to_dtype(std::move(cell_type))),
         reader_(
             CreateTable(this->data_client_, table_id, app_profile_id)
-                ->ReadRows(CreateRowSet(row_set, sample_row_keys, num_workers,
+                ->ReadRows(ComputeRowSetForWorker(row_set, sample_row_keys, num_workers,
                                         worker_id),
                            cbt::Filter::Chain(CreateColumnsFilter(column_map_),
                                               cbt::Filter::Latest(1)))),
@@ -343,7 +340,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         "between `num_workers`.",
         py::arg("len"), py::arg("num_workers"), py::arg("worker_id"));
 
-  m.def("create_row_set", &CreateRowSet,
+  m.def("create_row_set", &ComputeRowSetForWorker,
         "Utility function for getting a row_set intersected with this worker's "
         "chunk of work.",
         py::arg("row_set"), py::arg("sample_row_keys"), py::arg("num_workers"),
