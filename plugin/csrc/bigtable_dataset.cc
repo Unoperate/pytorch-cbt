@@ -171,13 +171,12 @@ cbt::RowSet ComputeRowSetForWorker(cbt::RowSet const& row_set,
   if (!start_key.empty()) {
     tablets.emplace_back(start_key, "");
   }
-  tablets.erase(
-      std::remove_if(tablets.begin(), tablets.end(),
-                     [&row_set](std::pair<std::string, std::string> p) {
-                       return !RowSetIntersectsRange(
-                           row_set, std::move(p.first), std::move(p.second));
-                     }),
-      tablets.end());
+  tablets.erase(std::remove_if(
+                    tablets.begin(), tablets.end(),
+                    [&row_set](std::pair<std::string, std::string> const& p) {
+                      return !RowSetIntersectsRange(row_set, p.first, p.second);
+                    }),
+                tablets.end());
 
   size_t start_idx =
       GetWorkerStartIndex(tablets.size(), num_workers, worker_id);
@@ -206,12 +205,12 @@ class BigtableDatasetIterator {
         data_client_(CreateDataClient(client)),
         cell_type_(
             torch::python::detail::py_object_to_dtype(std::move(cell_type))),
-        reader_(
-            CreateTable(this->data_client_, table_id, app_profile_id)
-                ->ReadRows(ComputeRowSetForWorker(row_set, sample_row_keys,
-                                                  num_workers, worker_id),
-                           cbt::Filter::Chain(CreateColumnsFilter(column_map_),
-                                              versions, cbt::Filter::Latest(1)))),
+        reader_(CreateTable(this->data_client_, table_id, app_profile_id)
+                    ->ReadRows(
+                        ComputeRowSetForWorker(row_set, sample_row_keys,
+                                               num_workers, worker_id),
+                        cbt::Filter::Chain(CreateColumnsFilter(column_map_),
+                                           versions, cbt::Filter::Latest(1)))),
         it_(this->reader_.begin()) {}
 
   torch::Tensor next() {
@@ -362,6 +361,4 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("latest_version_filter", &cbt::Filter::Latest, py::arg("n"));
   m.def("timestamp_range_micros", &cbt::Filter::TimestampRangeMicros,
         py::arg("start"), py::arg("end"));
-
-
 }

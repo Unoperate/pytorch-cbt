@@ -2,6 +2,7 @@
 import torch
 import pbt_C
 from typing import List
+import pytorch_bigtable.version_filters as filters
 
 
 class BigtableCredentials:
@@ -115,7 +116,8 @@ class BigtableTable:
 
   def read_rows(self, cell_type: torch.dtype, columns: List[str],
                 row_set: pbt_C.RowSet,
-                versions: str = "latest") -> torch.utils.data.IterableDataset:
+                versions: pbt_C.Filter = filters.latest()) -> \
+      torch.utils.data.IterableDataset:
     """Returns a `CloudBigtableIterableDataset` object.
 
     Args:
@@ -124,10 +126,8 @@ class BigtableTable:
         columns (List[str]): the list of columns to read from; the order on
             this list will determine the order in the output tensors
         row_set (RowSet): set of rows to read.
-        versions (str):
-            specifies which version should be retrieved. Defaults to "latest"
-                "latest": most recent value is returned
-                "oldest": the oldest present value is returned.
+        versions (Filter):
+            specifies which version should be retrieved. Defaults to latest.
     """
 
     return _BigtableDataset(self, columns, cell_type, row_set, versions)
@@ -135,9 +135,10 @@ class BigtableTable:
 
 class _BigtableDataset(torch.utils.data.IterableDataset):
   """Dataset that handles iterating over BigTable."""
+
   def __init__(self, table: BigtableTable, columns: List[str],
                cell_type: torch.dtype, row_set: pbt_C.RowSet,
-               versions: str) -> None:
+               versions: pbt_C.Filter = filters.latest()) -> None:
     super(_BigtableDataset).__init__()
 
     self._table = table
