@@ -47,6 +47,17 @@ void PutCellValueInTensor(torch::Tensor* tensor, int index,
   }
 }
 
+std::string GetTensorValueInBytes(torch::Tensor const& tensor, size_t i, size_t j) {
+  switch (tensor.scalar_type()) {
+    case torch::kFloat32: {
+      auto tensor_ptr = tensor.accessor<float, 2>();
+      return FloatToBytes(tensor_ptr[i][j]);
+    }
+    default:
+      throw std::runtime_error("type not implemented");
+  }
+}
+
 cbt::Filter CreateColumnsFilter(
     std::map<std::pair<std::string, std::string>, size_t> const& columns) {
   std::vector<cbt::Filter> filters;
@@ -108,8 +119,6 @@ void WriteTensor(std::shared_ptr<cbt::DataClient> const& data_client,
                  py::list const& row) {
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
-  auto* tensor_ptr = static_cast<float*>(tensor.data_ptr());
-
   for (int i = 0; i < tensor.size(0); i++) {
     auto row_key = row[i].cast<std::string>();
 
@@ -118,8 +127,8 @@ void WriteTensor(std::shared_ptr<cbt::DataClient> const& data_client,
       auto [col_family, col_name] = ColumnNameToPair(col_name_full);
       google::cloud::Status status = table->Apply(cbt::SingleRowMutation(
           row_key, cbt::SetCell(std::move(col_family), std::move(col_name),
-                                FloatToBytes(*tensor_ptr))));
-      ++tensor_ptr;
+                                GetTensorValueInBytes(tensor, i, j))));
+//      ++tensor_ptr;
       if (!status.ok()) throw std::runtime_error(status.message());
     }
   }
