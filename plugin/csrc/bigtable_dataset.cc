@@ -35,13 +35,61 @@ float BytesToFloat(std::string s) {
   return v;
 }
 
+
+std::string DoubleToBytes(double v) {
+  char buffer[sizeof(v)];
+  XDR xdrs;
+  xdrmem_create(&xdrs, buffer, sizeof(v), XDR_ENCODE);
+  if (!xdr_double(&xdrs, &v)) {
+    throw std::runtime_error("Error writing float to byte array.");
+  }
+  std::string s(buffer, sizeof(v));
+  return s;
+}
+
+double BytesToDouble(std::string s) {
+  double v;
+  XDR xdrs;
+  xdrmem_create(&xdrs, const_cast<char*>(s.data()), sizeof(v), XDR_DECODE);
+  if (!xdr_double(&xdrs, &v)) {
+    throw std::runtime_error("Error reading float from byte array.");
+  }
+  return v;
+}
+
+std::string Int64ToBytes(int64_t v) {
+  char buffer[sizeof(v)];
+  XDR xdrs;
+  xdrmem_create(&xdrs, buffer, sizeof(v), XDR_ENCODE);
+  if (!xdr_int64_t(&xdrs, &v)) {
+    throw std::runtime_error("Error writing float to byte array.");
+  }
+  std::string s(buffer, sizeof(v));
+  return s;
+}
+
+int64_t BytesToInt64(std::string s) {
+  int64_t v;
+  XDR xdrs;
+  xdrmem_create(&xdrs, const_cast<char*>(s.data()), sizeof(v), XDR_DECODE);
+  if (!xdr_int64_t(&xdrs, &v)) {
+    throw std::runtime_error("Error reading float from byte array.");
+  }
+  return v;
+}
+
 void PutCellValueInTensor(torch::Tensor* tensor, int index,
                           torch::Dtype cell_type, cbt::Cell const& cell) {
   switch (cell_type) {
     case torch::kFloat32:
       tensor->index_put_({index}, BytesToFloat(cell.value()));
       break;
-
+    case torch::kFloat64:
+      tensor->index_put_({index}, BytesToDouble(cell.value()));
+      break;
+    case torch::kI64:
+      tensor->index_put_({index}, BytesToInt64(cell.value()));
+      break;
     default:
       throw std::runtime_error("type not implemented");
   }
@@ -52,6 +100,14 @@ std::string GetTensorValueInBytes(torch::Tensor const& tensor, size_t i, size_t 
     case torch::kFloat32: {
       auto tensor_ptr = tensor.accessor<float, 2>();
       return FloatToBytes(tensor_ptr[i][j]);
+    }
+    case torch::kFloat64: {
+      auto tensor_ptr = tensor.accessor<double, 2>();
+      return DoubleToBytes(tensor_ptr[i][j]);
+    }
+    case torch::kInt64: {
+      auto tensor_ptr = tensor.accessor<int64_t, 2>();
+      return Int64ToBytes(tensor_ptr[i][j]);
     }
     default:
       throw std::runtime_error("type not implemented");
