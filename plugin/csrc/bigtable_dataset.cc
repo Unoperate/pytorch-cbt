@@ -35,7 +35,6 @@ float BytesToFloat(std::string s) {
   return v;
 }
 
-
 std::string DoubleToBytes(double v) {
   char buffer[sizeof(v)];
   XDR xdrs;
@@ -95,7 +94,8 @@ void PutCellValueInTensor(torch::Tensor* tensor, int index,
   }
 }
 
-std::string GetTensorValueInBytes(torch::Tensor const& tensor, size_t i, size_t j) {
+std::string GetTensorValueInBytes(torch::Tensor const& tensor, size_t i,
+                                  size_t j) {
   switch (tensor.scalar_type()) {
     case torch::kFloat32: {
       auto tensor_ptr = tensor.accessor<float, 2>();
@@ -184,9 +184,25 @@ void WriteTensor(std::shared_ptr<cbt::DataClient> const& data_client,
       google::cloud::Status status = table->Apply(cbt::SingleRowMutation(
           row_key, cbt::SetCell(std::move(col_family), std::move(col_name),
                                 GetTensorValueInBytes(tensor, i, j))));
-//      ++tensor_ptr;
       if (!status.ok()) throw std::runtime_error(status.message());
     }
+  }
+}
+
+torch::Tensor getFilledTensor(size_t size, torch::Dtype const& cell_type,
+                              py::object const& fill_value) {
+  switch (cell_type) {
+    case torch::kFloat32:
+      return torch::full(size, fill_value.cast<float>(),
+                         torch::TensorOptions().dtype(cell_type));
+    case torch::kFloat64:
+      return torch::full(size, fill_value.cast<double>(),
+                         torch::TensorOptions().dtype(cell_type));
+    case torch::kI64:
+      return torch::full(size, fill_value.cast<int64_t>(),
+                         torch::TensorOptions().dtype(cell_type));
+    default:
+      throw std::runtime_error("type not implemented");
   }
 }
 
@@ -198,9 +214,11 @@ class BigtableDatasetIterator {
                           py::list const& /*sample_row_keys*/,
                           py::list const& columns, py::object cell_type,
                           cbt::RowSet const& row_set,
-                          cbt::Filter const& versions, int /*num_workers*/,
+                          cbt::Filter const& versions,
+                          py::object const& fill_value, int /*num_workers*/,
                           int /*worker_id*/)
       : column_map_(CreateColumnMap(columns)),
+        fill_value_(std::move(fill_value)),
         cell_type_(
             torch::python::detail::py_object_to_dtype(std::move(cell_type))),
         reader_(CreateTable(data_client, table_id, app_profile_id)
@@ -212,8 +230,8 @@ class BigtableDatasetIterator {
   torch::Tensor next() {
     if (it_ == reader_.end()) throw py::stop_iteration();
 
-    torch::Tensor tensor = torch::empty(
-        this->column_map_.size(), torch::TensorOptions().dtype(cell_type_));
+    torch::Tensor tensor =
+        getFilledTensor(this->column_map_.size(), cell_type_, fill_value_);
     auto const& row = *it_;
     for (const auto& cell : row.value().cells()) {
       std::pair<std::string, std::string> key(cell.family_name(),
@@ -242,6 +260,7 @@ class BigtableDatasetIterator {
   // regular map because unordered_map cannot hash a pair by default.
   std::map<std::pair<std::string, std::string>, size_t> column_map_;
   torch::Dtype cell_type_;
+  py::object fill_value_;
   cbt::RowReader reader_;
   cbt::v1::internal::RowReaderIterator it_;
 };
@@ -283,7 +302,6 @@ void AppendRowOrRange(cbt::RowSet& row_set, py::args const& args) {
           "argument must be a row (str) or a range (RowRange)");
   }
 }
-
 }  // namespace
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
@@ -299,12 +317,12 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   py::class_<BigtableDatasetIterator>(m, "Iterator")
       .def(py::init<std::shared_ptr<cbt::DataClient>, std::string,
                     std::optional<std::string>, py::list, py::list, py::object,
-                    cbt::RowSet const&, cbt::Filter, int, int>(),
+                    cbt::RowSet const&, cbt::Filter, py::object, int, int>(),
            "get BigTable ReadRows iterator", py::arg("client"),
            py::arg("table_id"), py::arg("app_profile_id") = py::none(),
            py::arg("sample_row_keys"), py::arg("columns"), py::arg("cell_type"),
-           py::arg("row_set"), py::arg("versions"), py::arg("num_workers"),
-           py::arg("worker_id"))
+           py::arg("row_set"), py::arg("versions"), py::arg("fill"),
+           py::arg("num_workers"), py::arg("worker_id"))
       .def("__iter__",
            [](BigtableDatasetIterator& it) -> BigtableDatasetIterator& {
              return it;
