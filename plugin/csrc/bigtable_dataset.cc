@@ -134,13 +134,24 @@ void WriteTensor(py::object const& client, std::string const& table_id,
   }
 }
 
+// Return the index of the tablet that a worker should start with. Each worker
+// start with their first tablet and finish on tablet before next worker's first
+// tablet. Each worker should get num_tablets/num_workers rounded down, plus at
+// most one. If we simply round up, then the last worker may be starved.
+// Consider an example where there's 100 tablets and 11 workers. If we give
+// round_up(100/11) to each one, then first 10 workers get 10 tablets each, and
+// the last one gets nothing.
 int GetWorkerStartIndex(size_t num_tablets, size_t num_workers,
                         size_t worker_id) {
+  // if there's more workers than tablets, workers get one tablet each or less.
   if (num_tablets <= num_workers) return std::min(num_tablets, worker_id);
-  size_t rows_per_worker = num_tablets / num_workers;
-  size_t surplus_tablets = num_tablets % num_workers;
-  size_t workers_before = worker_id;
-  return rows_per_worker * workers_before +
+  // tablets_per_worker: minimum tablets each worker should obtain.
+  size_t const tablets_per_worker = num_tablets / num_workers;
+  // surplus_tablets: excess that has to be evenly distributed among the workers
+  // so that no worker gets more than tablets_per_worker + 1.
+  size_t const surplus_tablets = num_tablets % num_workers;
+  size_t const workers_before = worker_id;
+  return tablets_per_worker * workers_before +
          std::min(surplus_tablets, workers_before);
 }
 
