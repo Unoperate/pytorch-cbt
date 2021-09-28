@@ -223,8 +223,8 @@ class BigtableDatasetIterator {
                           py::list const& columns, py::object cell_type,
                           cbt::RowSet const& row_set,
                           cbt::Filter const& versions,
-                          std::optional<py::object> const& default_value, int /*num_workers*/,
-                          int /*worker_id*/)
+                          std::optional<py::object> const& default_value,
+                          int /*num_workers*/, int /*worker_id*/)
       : column_map_(CreateColumnMap(columns)),
         default_value_(std::move(default_value)),
         cell_type_(
@@ -325,12 +325,14 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   py::class_<BigtableDatasetIterator>(m, "Iterator")
       .def(py::init<std::shared_ptr<cbt::DataClient>, std::string,
                     std::optional<std::string>, py::list, py::list, py::object,
-                    cbt::RowSet const&, cbt::Filter, std::optional<py::object>, int, int>(),
+                    cbt::RowSet const&, cbt::Filter, std::optional<py::object>,
+                    int, int>(),
            "get BigTable ReadRows iterator", py::arg("client"),
            py::arg("table_id"), py::arg("app_profile_id") = py::none(),
            py::arg("sample_row_keys"), py::arg("columns"), py::arg("cell_type"),
-           py::arg("row_set"), py::arg("versions"), py::arg("default_value") = py::none(),
-           py::arg("num_workers"), py::arg("worker_id"))
+           py::arg("row_set"), py::arg("versions"),
+           py::arg("default_value") = py::none(), py::arg("num_workers"),
+           py::arg("worker_id"))
       .def("__iter__",
            [](BigtableDatasetIterator& it) -> BigtableDatasetIterator& {
              return it;
