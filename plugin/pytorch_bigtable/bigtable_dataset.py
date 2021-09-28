@@ -116,7 +116,7 @@ class BigtableTable:
   def read_rows(self, cell_type: torch.dtype, columns: List[str],
                 row_set: pbt_C.RowSet,
                 versions: pbt_C.Filter = filters.latest(),
-                fill_value: Union[int, float] = 0) -> \
+                default_value: Union[int, float] = None) -> \
                 torch.utils.data.IterableDataset:
     """Returns a `CloudBigtableIterableDataset` object.
 
@@ -128,11 +128,11 @@ class BigtableTable:
         row_set (RowSet): set of rows to read.
         versions (Filter):
             specifies which version should be retrieved. Defaults to latest.
-        fill_value (float|int): value to fill missing values with.
+        default_value (float|int): value to fill missing values with.
     """
 
     return _BigtableDataset(self, columns, cell_type, row_set, versions,
-                            fill_value)
+                            default_value)
 
 
 class _BigtableDataset(torch.utils.data.IterableDataset):
@@ -141,7 +141,7 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
   def __init__(self, table: BigtableTable, columns: List[str],
                cell_type: torch.dtype, row_set: pbt_C.RowSet,
                versions: pbt_C.Filter = filters.latest(),
-               fill_value: Union[int, float] = 0) -> None:
+               default_value: Union[int, float] = None) -> None:
     super(_BigtableDataset).__init__()
 
     self._table = table
@@ -149,7 +149,7 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
     self._cell_type = cell_type
     self._row_set = row_set
     self._versions = versions
-    self._fill_value = fill_value
+    self._default_value = default_value
 
   def __iter__(self):
     """
@@ -171,4 +171,4 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
                           self._table._app_profile_id,
                           self._table._sample_row_keys, self._columns,
                           self._cell_type, self._row_set, self._versions,
-                          self._fill_value, num_workers, worker_id)
+                          self._default_value, num_workers, worker_id)

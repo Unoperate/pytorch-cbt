@@ -59,8 +59,7 @@ class BigtableReadTest(unittest.TestCase):
     results = []
     for tensor in table.read_rows(torch.float32, ["fam1:col1", "fam1:col2"],
                                   row_set.from_rows_or_ranges(
-                                    row_range.infinite()),
-                                  fill_value=float("NaN")):
+                                    row_range.infinite())):
       results.append(tensor.reshape(1, -1))
       print(f"Got tensor: {tensor}")
     result = torch.cat(results)
@@ -84,7 +83,7 @@ class BigtableReadTest(unittest.TestCase):
     results = []
     for tensor in table.read_rows(torch.int64, ["fam1:col1", "fam1:col2"],
                                   row_set.from_rows_or_ranges(
-                                    row_range.infinite()), fill_value=0):
+                                    row_range.infinite()), default_value=0):
       results.append(tensor.reshape(1, -1))
       print(f"Got tensor: {tensor}")
     result = torch.cat(results)
