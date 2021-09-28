@@ -17,7 +17,7 @@ CBT_EMULATOR_SEARCH_PATHS = [
   'cbtemulator']
 
 CBT_CLI_SEARCH_PATHS = ['/usr/local/google-cloud-sdk/bin/cbt', '/usr/bin/cbt',
-  'cbt']
+                        'cbt']
 
 CBT_EMULATOR_PATH_ENV_VAR = 'CBT_EMULATOR_PATH'
 CBT_CLI_PATH_ENV_VAR = 'CBT_CLI_PATH'
@@ -73,12 +73,15 @@ class BigtableEmulator:
   def get_addr(self):
     return self._emulator_addr
 
-  def create_table(self, project_id, instance_id, table_id, column_families):
+  def create_table(self, project_id, instance_id, table_id, column_families,
+                   splits=None):
     cli_path = _get_cbt_cli_path()
-    subprocess.check_output(
-      [cli_path, '-project', project_id, '-instance', instance_id,
-       'createtable', table_id,
-       'families=' + ','.join([f'{fam}:never' for fam in column_families])])
+    cmd = [cli_path, '-project', project_id, '-instance', instance_id,
+           'createtable', table_id,
+           'families=' + ','.join([f'{fam}:never' for fam in column_families])]
+    if splits:
+      cmd.append('splits=' + ','.join(splits))
+    subprocess.check_output(cmd)
 
   def stop(self):
     self._emulator.terminate()

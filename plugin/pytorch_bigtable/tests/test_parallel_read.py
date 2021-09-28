@@ -34,7 +34,9 @@ class BigtableParallelReadTest(unittest.TestCase):
   def test_read(self):
     os.environ['BIGTABLE_EMULATOR_HOST'] = self.emulator.get_addr()
     self.emulator.create_table('fake_project', 'fake_instance', 'test-table',
-                               ['fam1', 'fam2'])
+                               ['fam1', 'fam2'],
+                               ['row' + str(i).rjust(3, '0') for i in range(20)
+                                if i % 7 == 0])
 
     ten = torch.Tensor(list(range(40))).reshape(20, 2)
 
@@ -46,7 +48,7 @@ class BigtableParallelReadTest(unittest.TestCase):
                        ['row' + str(i).rjust(3, '0') for i in range(20)])
 
     ds = table.read_rows(torch.float32, ['fam1:col1', 'fam1:col2'],
-      row_set.from_rows_or_ranges(row_range.infinite()))
+                         row_set.from_rows_or_ranges(row_range.infinite()))
 
     loader = DataLoader(ds, num_workers=4)
     for tensor in loader:
