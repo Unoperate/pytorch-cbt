@@ -38,7 +38,6 @@ class BigtableReadTest(unittest.TestCase):
                                   row_set.from_rows_or_ranges(
                                     row_range.infinite())):
       results.append(tensor.reshape(1, -1))
-      print(f"Got tensor: {tensor}")
     result = torch.cat(results)
     self.assertTrue((result.isnan() == ten.isnan()).all().item())
     self.assertTrue((result.nan_to_num(0) == ten.nan_to_num(0)).all().item())
@@ -61,7 +60,6 @@ class BigtableReadTest(unittest.TestCase):
                                   row_set.from_rows_or_ranges(
                                     row_range.infinite())):
       results.append(tensor.reshape(1, -1))
-      print(f"Got tensor: {tensor}")
     result = torch.cat(results)
     self.assertTrue(result[:, 1].isnan().all().item())
     self.assertTrue((result[:, 0] == ten[:, 0]).all().item())
@@ -85,7 +83,6 @@ class BigtableReadTest(unittest.TestCase):
                                   row_set.from_rows_or_ranges(
                                     row_range.infinite()), default_value=0):
       results.append(tensor.reshape(1, -1))
-      print(f"Got tensor: {tensor}")
     result = torch.cat(results)
     ten[:, 1] = 0
     different_elements = (ten != result).sum().item()
