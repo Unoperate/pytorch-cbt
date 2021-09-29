@@ -117,7 +117,7 @@ void WriteTensor(py::object const& client, std::string const& table_id,
   std::shared_ptr<cbt::DataClient> data_client = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
-  auto* tensor_ptr = static_cast<float*>(tensor.data_ptr());
+  auto tensor_ptr = tensor.accessor<float, 2>();
 
   for (int i = 0; i < tensor.size(0); i++) {
     auto row_key = row[i].cast<std::string>();
@@ -127,8 +127,7 @@ void WriteTensor(py::object const& client, std::string const& table_id,
       auto [col_family, col_name] = ColumnNameToPair(col_name_full);
       google::cloud::Status status = table->Apply(cbt::SingleRowMutation(
           row_key, cbt::SetCell(std::move(col_family), std::move(col_name),
-                                FloatToBytes(*tensor_ptr))));
-      ++tensor_ptr;
+                                FloatToBytes(tensor_ptr[i][j]))));
       if (!status.ok()) throw std::runtime_error(status.message());
     }
   }
@@ -356,20 +355,24 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
       .def("is_empty", &cbt::RowSet::IsEmpty)
       .def("__repr__", &PrintRowSet);
 
-  m.def("get_worker_start_index", &GetWorkerStartIndex,
-        "Utility function for dividing a part of a list of length `len` "
-        "between `num_workers`.",
-        py::arg("len"), py::arg("num_workers"), py::arg("worker_id"));
-
-  m.def("create_row_set", &ComputeRowSetForWorker,
-        "Utility function for getting a row_set intersected with this worker's "
-        "chunk of work.",
-        py::arg("row_set"), py::arg("sample_row_keys"), py::arg("num_workers"),
-        py::arg("worker_id"));
-
   py::class_<cbt::Filter>(m, "Filter").def("__repr__", &PrintFilter);
 
   m.def("latest_version_filter", &cbt::Filter::Latest, py::arg("n"));
   m.def("timestamp_range_micros", &cbt::Filter::TimestampRangeMicros,
         py::arg("start"), py::arg("end"));
+
+  // we're exporting the functions below to be able to test them with python
+  // unittests. It did not make sense to set up the whole testing framework
+  // in c++ just for two simple methods. If we ever need to test more code, we
+  // will reconsider it.
+  m.def("_get_worker_start_index", &GetWorkerStartIndex,
+        "Utility function for dividing a part of a list of length `len` "
+        "between `num_workers`.",
+        py::arg("len"), py::arg("num_workers"), py::arg("worker_id"));
+
+  m.def("_compute_row_set_for_worker", &ComputeRowSetForWorker,
+        "Utility function for getting a row_set intersected with this worker's "
+        "chunk of work.",
+        py::arg("row_set"), py::arg("sample_row_keys"), py::arg("num_workers"),
+        py::arg("worker_id"));
 }

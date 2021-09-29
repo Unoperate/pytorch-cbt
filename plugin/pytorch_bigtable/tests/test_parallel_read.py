@@ -47,9 +47,14 @@ class BigtableParallelReadTest(unittest.TestCase):
     table.write_tensor(ten, ['fam1:col1', 'fam2:col2'],
                        ['row' + str(i).rjust(3, '0') for i in range(20)])
 
-    ds = table.read_rows(torch.float32, ['fam1:col1', 'fam1:col2'],
+    ds = table.read_rows(torch.float32, ['fam1:col1', 'fam2:col2'],
                          row_set.from_rows_or_ranges(row_range.infinite()))
 
     loader = DataLoader(ds, num_workers=4)
+    output = []
     for tensor in loader:
-      print('got tensor:', tensor)
+      output.append(tensor)
+      print("got tensor:", tensor)
+    output = sorted(output,key= lambda x: x[0,0].item())
+    output = torch.cat(output)
+    self.assertTrue((ten == output).all())
