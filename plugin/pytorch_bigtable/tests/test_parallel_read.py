@@ -54,7 +54,6 @@ class BigtableParallelReadTest(unittest.TestCase):
     output = []
     for tensor in loader:
       output.append(tensor)
-      print("got tensor:", tensor)
     output = sorted(output,key= lambda x: x[0,0].item())
     output = torch.cat(output)
     self.assertTrue((ten == output).all())
