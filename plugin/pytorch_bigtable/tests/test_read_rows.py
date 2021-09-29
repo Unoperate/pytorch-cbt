@@ -61,7 +61,7 @@ class BigtableReadTest(unittest.TestCase):
                                     row_range.infinite())):
       results.append(tensor.reshape(1, -1))
     result = torch.cat(results)
-    self.assertTrue(result[:, 1].isnan().all().item())
+    self.assertTrue((result[:, 1] == 0.).all().item())
     self.assertTrue((result[:, 0] == ten[:, 0]).all().item())
 
   def test_read_int64(self):

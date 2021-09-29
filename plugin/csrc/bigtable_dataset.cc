@@ -196,13 +196,13 @@ torch::Tensor getFilledTensor(size_t size, torch::Dtype const& cell_type,
       return default_value
                  ? torch::full(size, (*default_value).cast<float>(),
                                torch::TensorOptions().dtype(cell_type))
-                 : torch::full(size, NAN,
+                 : torch::full(size, 0.,
                                torch::TensorOptions().dtype(cell_type));
     case torch::kFloat64:
       return default_value
                  ? torch::full(size, (*default_value).cast<double>(),
                                torch::TensorOptions().dtype(cell_type))
-                 : torch::full(size, NAN,
+                 : torch::full(size, 0.,
                                torch::TensorOptions().dtype(cell_type));
     case torch::kI64:
       return default_value
@@ -223,7 +223,7 @@ class BigtableDatasetIterator {
                           py::list const& columns, py::object cell_type,
                           cbt::RowSet const& row_set,
                           cbt::Filter const& versions,
-                          std::optional<py::object> const& default_value,
+                          std::optional<py::object> default_value,
                           int /*num_workers*/, int /*worker_id*/)
       : column_map_(CreateColumnMap(columns)),
         default_value_(std::move(default_value)),
