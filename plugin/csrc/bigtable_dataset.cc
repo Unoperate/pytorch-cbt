@@ -141,6 +141,15 @@ std::pair<std::string, std::string> ColumnNameToPair(
   return pair;
 }
 
+std::shared_ptr<cbt::DataClient> CreateDataClient(py::object const& client) {
+  auto project_id = client.attr("_project_id").cast<std::string>();
+  auto instance_id = client.attr("_instance_id").cast<std::string>();
+  google::cloud::Options options;
+  return cbt::CreateDefaultDataClient(std::move(project_id),
+                                      std::move(instance_id),
+                                      cbt::ClientOptions(std::move(options)));
+}
+
 std::unique_ptr<cbt::Table> CreateTable(
     std::shared_ptr<cbt::DataClient> const& data_client,
     std::string const& table_id,
@@ -150,9 +159,9 @@ std::unique_ptr<cbt::Table> CreateTable(
                         : std::make_unique<cbt::Table>(data_client, table_id);
 }
 
-py::list SampleRowKeys(std::shared_ptr<cbt::DataClient> const& data_client,
-                       std::string const& table_id,
+py::list SampleRowKeys(py::object const& client, std::string const& table_id,
                        std::optional<std::string> const& app_profile_id) {
+  std::shared_ptr<cbt::DataClient> data_client = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
   auto maybe_sample_row_keys = table->SampleRows();
@@ -168,11 +177,11 @@ py::list SampleRowKeys(std::shared_ptr<cbt::DataClient> const& data_client,
   return res;
 }
 
-void WriteTensor(std::shared_ptr<cbt::DataClient> const& data_client,
-                 std::string const& table_id,
+void WriteTensor(py::object const& client, std::string const& table_id,
                  std::optional<std::string> const& app_profile_id,
                  torch::Tensor const& tensor, py::list const& columns,
                  py::list const& row) {
+  std::shared_ptr<cbt::DataClient> data_client = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
   for (int i = 0; i < tensor.size(0); i++) {
@@ -214,25 +223,96 @@ torch::Tensor getFilledTensor(size_t size, torch::Dtype const& cell_type,
   }
 }
 
+// Return the index of the tablet that a worker should start with. Each worker
+// start with their first tablet and finish on tablet before next worker's first
+// tablet. Each worker should get num_tablets/num_workers rounded down, plus at
+// most one. If we simply round up, then the last worker may be starved.
+// Consider an example where there's 100 tablets and 11 workers. If we give
+// round_up(100/11) to each one, then first 10 workers get 10 tablets each, and
+// the last one gets nothing.
+int GetWorkerStartIndex(size_t num_tablets, size_t num_workers,
+                        size_t worker_id) {
+  // if there's more workers than tablets, workers get one tablet each or less.
+  if (num_tablets <= num_workers) return std::min(num_tablets, worker_id);
+  // tablets_per_worker: minimum tablets each worker should obtain.
+  size_t const tablets_per_worker = num_tablets / num_workers;
+  // surplus_tablets: excess that has to be evenly distributed among the workers
+  // so that no worker gets more than tablets_per_worker + 1.
+  size_t const surplus_tablets = num_tablets % num_workers;
+  size_t const workers_before = worker_id;
+  return tablets_per_worker * workers_before +
+         std::min(surplus_tablets, workers_before);
+}
+
+bool RowSetIntersectsRange(cbt::RowSet const& row_set,
+                           std::string const& start_key,
+                           std::string const& end_key) {
+  auto range = cbt::RowRange::Range(start_key, end_key);
+  return !row_set.Intersect(range).IsEmpty();
+}
+
+cbt::RowSet ComputeRowSetForWorker(cbt::RowSet const& row_set,
+                                   py::list const& sample_row_keys,
+                                   int num_workers, int worker_id) {
+  if (sample_row_keys.empty() || row_set.IsEmpty()) {
+    if (worker_id == 0) {
+      return row_set;
+    }
+    return cbt::RowRange::Empty();
+  }
+  std::vector<std::pair<std::string, std::string>> tablets;
+
+  std::string start_key;
+  for (py::handle end_key_handle : sample_row_keys) {
+    auto end_key = end_key_handle.cast<py::tuple>()[0].cast<std::string>();
+    tablets.emplace_back(start_key, end_key);
+    start_key = std::move(end_key);
+  }
+  if (!start_key.empty()) {
+    tablets.emplace_back(start_key, "");
+  }
+  tablets.erase(std::remove_if(
+                    tablets.begin(), tablets.end(),
+                    [&row_set](std::pair<std::string, std::string> const& p) {
+                      return !RowSetIntersectsRange(row_set, p.first, p.second);
+                    }),
+                tablets.end());
+
+  size_t start_idx =
+      GetWorkerStartIndex(tablets.size(), num_workers, worker_id);
+  size_t next_worker_start_idx =
+      GetWorkerStartIndex(tablets.size(), num_workers, worker_id + 1);
+
+  if (start_idx >= next_worker_start_idx) return cbt::RowRange::Empty();
+  size_t end_idx = next_worker_start_idx - 1;
+
+  start_key = tablets.at(start_idx).first;
+  std::string end_key = tablets.at(end_idx).second;
+
+  return row_set.Intersect(cbt::RowRange::Range(start_key, end_key));
+}
+
 class BigtableDatasetIterator {
  public:
-  BigtableDatasetIterator(std::shared_ptr<cbt::DataClient> const& data_client,
-                          std::string const& table_id,
+  BigtableDatasetIterator(py::object const& client, std::string const& table_id,
                           std::optional<std::string> const& app_profile_id,
-                          py::list const& /*sample_row_keys*/,
+                          py::list const& sample_row_keys,
                           py::list const& columns, py::object cell_type,
                           cbt::RowSet const& row_set,
                           cbt::Filter const& versions,
                           std::optional<py::object> default_value,
-                          int /*num_workers*/, int /*worker_id*/)
+                          int num_workers, int worker_id)
       : column_map_(CreateColumnMap(columns)),
+        data_client_(CreateDataClient(client)),
         default_value_(std::move(default_value)),
         cell_type_(
             torch::python::detail::py_object_to_dtype(std::move(cell_type))),
-        reader_(CreateTable(data_client, table_id, app_profile_id)
-                    ->ReadRows(row_set, cbt::Filter::Chain(
-                                            CreateColumnsFilter(column_map_),
-                                            versions, cbt::Filter::Latest(1)))),
+        reader_(CreateTable(this->data_client_, table_id, app_profile_id)
+                    ->ReadRows(
+                        ComputeRowSetForWorker(row_set, sample_row_keys,
+                                               num_workers, worker_id),
+                        cbt::Filter::Chain(CreateColumnsFilter(column_map_),
+                                           versions, cbt::Filter::Latest(1)))),
         it_(this->reader_.begin()) {}
 
   torch::Tensor next() {
@@ -267,19 +347,12 @@ class BigtableDatasetIterator {
   // Mapping between column names and their indices in tensors.  We're using a
   // regular map because unordered_map cannot hash a pair by default.
   std::map<std::pair<std::string, std::string>, size_t> column_map_;
+  std::shared_ptr<cbt::DataClient> data_client_;
   torch::Dtype cell_type_;
   std::optional<py::object> default_value_;
   cbt::RowReader reader_;
   cbt::v1::internal::RowReaderIterator it_;
 };
-
-std::shared_ptr<cbt::DataClient> CreateDataClient(
-    std::string const& project_id, std::string const& instance_id,
-    py::object const& /*credentials*/, std::string const& /*endpoint*/) {
-  google::cloud::Options options;
-  return cbt::CreateDefaultDataClient(project_id, instance_id,
-                                      cbt::ClientOptions(options));
-}
 
 std::string PrintRowRange(cbt::RowRange const& row_range) {
   std::string res;
@@ -314,7 +387,7 @@ void AppendRowOrRange(cbt::RowSet& row_set, py::args const& args) {
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("sample_row_keys", &SampleRowKeys, "get sample row_keys from BigTable",
-        py::arg("data_client"), py::arg("table_id"),
+        py::arg("client"), py::arg("table_id"),
         py::arg("application_profile_id") = py::none());
 
   m.def("write_tensor", &WriteTensor, "write tensor to BigTable",
@@ -323,10 +396,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         py::arg("columns"), py::arg("row_keys"));
 
   py::class_<BigtableDatasetIterator>(m, "Iterator")
-      .def(py::init<std::shared_ptr<cbt::DataClient>, std::string,
-                    std::optional<std::string>, py::list, py::list, py::object,
-                    cbt::RowSet const&, cbt::Filter, std::optional<py::object>,
-                    int, int>(),
+      .def(py::init<py::object, std::string, std::optional<std::string>,
+                    py::list, py::list, py::object, cbt::RowSet const&,
+                    cbt::Filter, std::optional<py::object>, int, int>(),
            "get BigTable ReadRows iterator", py::arg("client"),
            py::arg("table_id"), py::arg("app_profile_id") = py::none(),
            py::arg("sample_row_keys"), py::arg("columns"), py::arg("cell_type"),
@@ -338,14 +410,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
              return it;
            })
       .def("__next__", &BigtableDatasetIterator::next);
-
-  // NOLINTNEXTLINE(bugprone-unused-raii)
-  py::class_<cbt::DataClient, std::shared_ptr<cbt::DataClient>>(
-      m, "BigtableDataClient");
-
-  m.def("create_data_client", &CreateDataClient, "Create a cbt::DataClient",
-        py::arg("project_id"), py::arg("instance_id"), py::arg("credentials"),
-        py::arg("endpoint"));
 
   // NOLINTNEXTLINE(bugprone-unused-raii)
   py::class_<cbt::RowRange>(m, "RowRange").def("__repr__", &PrintRowRange);
@@ -381,6 +445,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
       .def(py::init<>())
       .def("append", &AppendRowOrRange)
       .def("intersect", &cbt::RowSet::Intersect, py::arg("row_range"))
+      .def("is_empty", &cbt::RowSet::IsEmpty)
       .def("__repr__", &PrintRowSet);
 
   py::class_<cbt::Filter>(m, "Filter").def("__repr__", &PrintFilter);
@@ -388,4 +453,19 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("latest_version_filter", &cbt::Filter::Latest, py::arg("n"));
   m.def("timestamp_range_micros", &cbt::Filter::TimestampRangeMicros,
         py::arg("start"), py::arg("end"));
+
+  // we're exporting the functions below to be able to test them with python
+  // unittests. It did not make sense to set up the whole testing framework
+  // in c++ just for two simple methods. If we ever need to test more code, we
+  // will reconsider it.
+  m.def("_get_worker_start_index", &GetWorkerStartIndex,
+        "Utility function for dividing a part of a list of length `len` "
+        "between `num_workers`.",
+        py::arg("len"), py::arg("num_workers"), py::arg("worker_id"));
+
+  m.def("_compute_row_set_for_worker", &ComputeRowSetForWorker,
+        "Utility function for getting a row_set intersected with this worker's "
+        "chunk of work.",
+        py::arg("row_set"), py::arg("sample_row_keys"), py::arg("num_workers"),
+        py::arg("worker_id"));
 }
