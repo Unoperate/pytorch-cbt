@@ -106,7 +106,8 @@ class BigtableTable:
       raise ValueError("`tensor` must have exactly two dimensions")
 
     if len(row_keys) != tensor.shape[0]:
-      raise ValueError("`row_keys` must have the same length as tensor.shape[0]")
+      raise ValueError(
+        "`row_keys` must have the same length as tensor.shape[0]")
 
     if len(columns) != tensor.shape[1]:
       raise ValueError("`columns` must have the same length as tensor.shape[1]")

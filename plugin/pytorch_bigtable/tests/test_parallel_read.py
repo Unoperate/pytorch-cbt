@@ -16,6 +16,8 @@
 # pylint: disable=C0114
 # disable class docstring for tests
 # pylint: disable=C0115
+# disable warning for accessing protected members
+# pylint: disable=W0212
 import unittest
 import torch
 import os
@@ -38,9 +40,10 @@ class BigtableParallelReadTest(unittest.TestCase):
 
     self.emulator.create_table('fake_project', 'fake_instance', 'test-table',
                                ['fam1', 'fam2'],
-                               ['row' + str(i).rjust(3, '0') for i in range(0, num_rows, 30)])
+                               ['row' + str(i).rjust(3, '0') for i in
+                                range(0, num_rows, 30)])
 
-    ten = torch.Tensor(list(range(num_rows*2))).reshape(num_rows, 2)
+    ten = torch.Tensor(list(range(num_rows * 2))).reshape(num_rows, 2)
 
     client = BigtableClient('fake_project', 'fake_instance',
                             endpoint=self.emulator.get_addr())
@@ -58,7 +61,7 @@ class BigtableParallelReadTest(unittest.TestCase):
     output = []
     for tensor in loader:
       output.append(tensor)
-    output = sorted(output,key= lambda x: x[0,0].item())
+    output = sorted(output, key=lambda x: x[0, 0].item())
     output = torch.cat(output)
     self.assertTrue((ten == output).all())
 
@@ -66,7 +69,8 @@ class BigtableParallelReadTest(unittest.TestCase):
     os.environ['BIGTABLE_EMULATOR_HOST'] = self.emulator.get_addr()
     self.emulator.create_table('fake_project', 'fake_instance', 'test-table',
                                ['fam1', 'fam2'],
-                               ['row' + str(i).rjust(3, '0') for i in range(0,500,50)])
+                               ['row' + str(i).rjust(3, '0') for i in
+                                range(0, 500, 50)])
 
     ten = torch.Tensor(list(range(500))).reshape(250, 2)
 

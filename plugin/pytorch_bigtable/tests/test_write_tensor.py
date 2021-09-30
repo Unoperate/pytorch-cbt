@@ -60,8 +60,7 @@ class BigtableWriteTest(unittest.TestCase):
                       ["row" + str(i).rjust(3, "0") for i in range(10)])
 
     self.assertRaises(ValueError, table.write_tensor, ten[0],
-                      ["fam1:c1", "fam1:c2"],
-                      ["row000"])
+                      ["fam1:c1", "fam1:c2"], ["row000"])
 
     # non existing family
     self.assertRaises(RuntimeError, table.write_tensor, ten,
@@ -73,7 +72,7 @@ class BigtableWriteTest(unittest.TestCase):
     self.emulator.create_table("fake_project", "fake_instance", "test-table",
                                ["fam1", "fam2"])
 
-    ten = torch.tensor([1,2], dtype=torch.float32).reshape(1,-1)
+    ten = torch.tensor([1, 2], dtype=torch.float32).reshape(1, -1)
 
     client = BigtableClient("fake_project", "fake_instance",
                             endpoint=self.emulator.get_addr())
@@ -92,13 +91,14 @@ class BigtableWriteTest(unittest.TestCase):
     self.emulator.create_table("fake_project", "fake_instance", "test-table",
                                ["fam1", "fam2"])
 
-    ten = torch.Tensor(list(range(40))).reshape(-1,1)
+    ten = torch.Tensor(list(range(40))).reshape(-1, 1)
 
     client = BigtableClient("fake_project", "fake_instance",
                             endpoint=self.emulator.get_addr())
     table = client.get_table("test-table")
 
-    table.write_tensor(ten, ["fam1:col1"], ["row" + str(i).rjust(3, "0") for i in range(40)])
+    table.write_tensor(ten, ["fam1:col1"],
+                       ["row" + str(i).rjust(3, "0") for i in range(40)])
 
     results = []
     for tensor in table.read_rows(torch.float32, ["fam1:col1"],
