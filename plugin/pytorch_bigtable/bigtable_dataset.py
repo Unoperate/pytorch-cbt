@@ -1,6 +1,6 @@
 """Module containing core functionality of pytorch bigtable dataset"""
 import torch
-import pbt_C
+from . import pbt_C
 from typing import List, Union
 import pytorch_bigtable.version_filters as filters
 

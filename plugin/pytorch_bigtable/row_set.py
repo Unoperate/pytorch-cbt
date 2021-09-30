@@ -1,5 +1,5 @@
 """Module implementing basic functions for obtaining BigTable RowSets"""
-import pbt_C
+from . import pbt_C
 from typing import Union
 
 
