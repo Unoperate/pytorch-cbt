@@ -1,7 +1,7 @@
 """Module containing core functionality of pytorch bigtable dataset"""
 import torch
 import pbt_C
-from typing import List
+from typing import List, Union
 import pytorch_bigtable.version_filters as filters
 
 
@@ -88,7 +88,7 @@ class BigtableTable:
                                                   self._app_profile_id)
 
   def write_tensor(self, tensor: torch.Tensor, columns: List[str],
-                   row_keys: List[str], ):
+                   row_keys: List[str]):
     """Opens a connection and writes data from tensor.
 
     Args:
@@ -116,8 +116,9 @@ class BigtableTable:
 
   def read_rows(self, cell_type: torch.dtype, columns: List[str],
                 row_set: pbt_C.RowSet,
-                versions: pbt_C.Filter = filters.latest()) -> \
-      torch.utils.data.IterableDataset:
+                versions: pbt_C.Filter = filters.latest(),
+                default_value: Union[int, float] = None) -> \
+                torch.utils.data.IterableDataset:
     """Returns a `CloudBigtableIterableDataset` object.
 
     Args:
@@ -128,9 +129,11 @@ class BigtableTable:
         row_set (RowSet): set of rows to read.
         versions (Filter):
             specifies which version should be retrieved. Defaults to latest.
+        default_value (float|int): value to fill missing values with.
     """
 
-    return _BigtableDataset(self, columns, cell_type, row_set, versions)
+    return _BigtableDataset(self, columns, cell_type, row_set, versions,
+                            default_value)
 
 
 class _BigtableDataset(torch.utils.data.IterableDataset):
@@ -138,7 +141,8 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
 
   def __init__(self, table: BigtableTable, columns: List[str],
                cell_type: torch.dtype, row_set: pbt_C.RowSet,
-               versions: pbt_C.Filter = filters.latest()) -> None:
+               versions: pbt_C.Filter = filters.latest(),
+               default_value: Union[int, float] = None) -> None:
     super(_BigtableDataset).__init__()
 
     self._table = table
@@ -146,6 +150,7 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
     self._cell_type = cell_type
     self._row_set = row_set
     self._versions = versions
+    self._default_value = default_value
 
   def __iter__(self):
     """
@@ -167,4 +172,4 @@ class _BigtableDataset(torch.utils.data.IterableDataset):
                           self._table._app_profile_id,
                           self._table._sample_row_keys, self._columns,
                           self._cell_type, self._row_set, self._versions,
-                          num_workers, worker_id)
+                          self._default_value, num_workers, worker_id)

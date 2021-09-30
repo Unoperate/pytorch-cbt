@@ -25,12 +25,54 @@ std::string FloatToBytes(float v) {
   return s;
 }
 
-float BytesToFloat(std::string s) {
+float BytesToFloat(std::string const& s) {
   float v;
   XDR xdrs;
   xdrmem_create(&xdrs, const_cast<char*>(s.data()), sizeof(v), XDR_DECODE);
   if (!xdr_float(&xdrs, &v)) {
     throw std::runtime_error("Error reading float from byte array.");
+  }
+  return v;
+}
+
+std::string DoubleToBytes(double v) {
+  char buffer[sizeof(v)];
+  XDR xdrs;
+  xdrmem_create(&xdrs, buffer, sizeof(v), XDR_ENCODE);
+  if (!xdr_double(&xdrs, &v)) {
+    throw std::runtime_error("Error writing double to byte array.");
+  }
+  std::string s(buffer, sizeof(v));
+  return s;
+}
+
+double BytesToDouble(std::string const& s) {
+  double v;
+  XDR xdrs;
+  xdrmem_create(&xdrs, const_cast<char*>(s.data()), sizeof(v), XDR_DECODE);
+  if (!xdr_double(&xdrs, &v)) {
+    throw std::runtime_error("Error reading double from byte array.");
+  }
+  return v;
+}
+
+std::string Int64ToBytes(int64_t v) {
+  char buffer[sizeof(v)];
+  XDR xdrs;
+  xdrmem_create(&xdrs, buffer, sizeof(v), XDR_ENCODE);
+  if (!xdr_int64_t(&xdrs, &v)) {
+    throw std::runtime_error("Error writing int64 to byte array.");
+  }
+  std::string s(buffer, sizeof(v));
+  return s;
+}
+
+int64_t BytesToInt64(std::string const& s) {
+  int64_t v;
+  XDR xdrs;
+  xdrmem_create(&xdrs, const_cast<char*>(s.data()), sizeof(v), XDR_DECODE);
+  if (!xdr_int64_t(&xdrs, &v)) {
+    throw std::runtime_error("Error reading int64 from byte array.");
   }
   return v;
 }
@@ -41,7 +83,32 @@ void PutCellValueInTensor(torch::Tensor* tensor, int index,
     case torch::kFloat32:
       tensor->index_put_({index}, BytesToFloat(cell.value()));
       break;
+    case torch::kFloat64:
+      tensor->index_put_({index}, BytesToDouble(cell.value()));
+      break;
+    case torch::kI64:
+      tensor->index_put_({index}, BytesToInt64(cell.value()));
+      break;
+    default:
+      throw std::runtime_error("type not implemented");
+  }
+}
 
+std::string GetTensorValueAsBytes(torch::Tensor const& tensor, size_t i,
+                                  size_t j) {
+  switch (tensor.scalar_type()) {
+    case torch::kFloat32: {
+      auto tensor_ptr = tensor.accessor<float, 2>();
+      return FloatToBytes(tensor_ptr[i][j]);
+    }
+    case torch::kFloat64: {
+      auto tensor_ptr = tensor.accessor<double, 2>();
+      return DoubleToBytes(tensor_ptr[i][j]);
+    }
+    case torch::kInt64: {
+      auto tensor_ptr = tensor.accessor<int64_t, 2>();
+      return Int64ToBytes(tensor_ptr[i][j]);
+    }
     default:
       throw std::runtime_error("type not implemented");
   }
@@ -117,8 +184,6 @@ void WriteTensor(py::object const& client, std::string const& table_id,
   std::shared_ptr<cbt::DataClient> data_client = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
-  auto tensor_ptr = tensor.accessor<float, 2>();
-
   for (int i = 0; i < tensor.size(0); i++) {
     auto row_key = row[i].cast<std::string>();
 
@@ -127,9 +192,34 @@ void WriteTensor(py::object const& client, std::string const& table_id,
       auto [col_family, col_name] = ColumnNameToPair(col_name_full);
       google::cloud::Status status = table->Apply(cbt::SingleRowMutation(
           row_key, cbt::SetCell(std::move(col_family), std::move(col_name),
-                                FloatToBytes(tensor_ptr[i][j]))));
+                                GetTensorValueAsBytes(tensor, i, j))));
       if (!status.ok()) throw std::runtime_error(status.message());
     }
+  }
+}
+
+torch::Tensor getFilledTensor(size_t size, torch::Dtype const& cell_type,
+                              std::optional<py::object> const& default_value) {
+  switch (cell_type) {
+    case torch::kFloat32:
+      return default_value
+                 ? torch::full(size, (*default_value).cast<float>(),
+                               torch::TensorOptions().dtype(cell_type))
+                 : torch::full(size, 0.,
+                               torch::TensorOptions().dtype(cell_type));
+    case torch::kFloat64:
+      return default_value
+                 ? torch::full(size, (*default_value).cast<double>(),
+                               torch::TensorOptions().dtype(cell_type))
+                 : torch::full(size, 0.,
+                               torch::TensorOptions().dtype(cell_type));
+    case torch::kI64:
+      return default_value
+                 ? torch::full(size, (*default_value).cast<int64_t>(),
+                               torch::TensorOptions().dtype(cell_type))
+                 : torch::zeros(size, torch::TensorOptions().dtype(cell_type));
+    default:
+      throw std::runtime_error("type not implemented");
   }
 }
 
@@ -209,10 +299,12 @@ class BigtableDatasetIterator {
                           py::list const& sample_row_keys,
                           py::list const& columns, py::object cell_type,
                           cbt::RowSet const& row_set,
-                          cbt::Filter const& versions, int num_workers,
-                          int worker_id)
+                          cbt::Filter const& versions,
+                          std::optional<py::object> default_value,
+                          int num_workers, int worker_id)
       : column_map_(CreateColumnMap(columns)),
         data_client_(CreateDataClient(client)),
+        default_value_(std::move(default_value)),
         cell_type_(
             torch::python::detail::py_object_to_dtype(std::move(cell_type))),
         reader_(CreateTable(this->data_client_, table_id, app_profile_id)
@@ -226,8 +318,8 @@ class BigtableDatasetIterator {
   torch::Tensor next() {
     if (it_ == reader_.end()) throw py::stop_iteration();
 
-    torch::Tensor tensor = torch::empty(
-        this->column_map_.size(), torch::TensorOptions().dtype(cell_type_));
+    torch::Tensor tensor =
+        getFilledTensor(this->column_map_.size(), cell_type_, default_value_);
     auto const& row = *it_;
     for (const auto& cell : row.value().cells()) {
       std::pair<std::string, std::string> key(cell.family_name(),
@@ -257,6 +349,7 @@ class BigtableDatasetIterator {
   std::map<std::pair<std::string, std::string>, size_t> column_map_;
   std::shared_ptr<cbt::DataClient> data_client_;
   torch::Dtype cell_type_;
+  std::optional<py::object> default_value_;
   cbt::RowReader reader_;
   cbt::v1::internal::RowReaderIterator it_;
 };
@@ -290,7 +383,6 @@ void AppendRowOrRange(cbt::RowSet& row_set, py::args const& args) {
           "argument must be a row (str) or a range (RowRange)");
   }
 }
-
 }  // namespace
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
@@ -306,11 +398,12 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   py::class_<BigtableDatasetIterator>(m, "Iterator")
       .def(py::init<py::object, std::string, std::optional<std::string>,
                     py::list, py::list, py::object, cbt::RowSet const&,
-                    cbt::Filter, int, int>(),
+                    cbt::Filter, std::optional<py::object>, int, int>(),
            "get BigTable ReadRows iterator", py::arg("client"),
            py::arg("table_id"), py::arg("app_profile_id") = py::none(),
            py::arg("sample_row_keys"), py::arg("columns"), py::arg("cell_type"),
-           py::arg("row_set"), py::arg("versions"), py::arg("num_workers"),
+           py::arg("row_set"), py::arg("versions"),
+           py::arg("default_value") = py::none(), py::arg("num_workers"),
            py::arg("worker_id"))
       .def("__iter__",
            [](BigtableDatasetIterator& it) -> BigtableDatasetIterator& {
