@@ -11,7 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+#
+# We provide an example of training a NN for fraud detection using data
+# stored in BigTable in `fraud_example.py`. To showcase what our plugin does,
+# we focus on **reading** the data that is already in BigTable,
+# while training the network.
+#
+# The code in this file is used to upload the data and is by no means
+# optimal or efficient and SHOULD NOT BE USED for any real application. If
+# you're looking for uploading data to BT efficiently, please consider
+# using BT client libraries:
+# https://cloud.google.com/bigtable/docs/reference/libraries
+#
+# Using the code from the Fraud Detection Handbook that is available freely
+# on github you can generate as big of a dataset as you wish. However,
+# for the sake of this example, we use the pre-generated and pre-formatted
+# data that was provided in the repository. This code loads that data into
+# memory, splits it into training and testing sets, saves both as CSV and
+# uploads the training set to BT.
+#
 # This example is based on data from:
 # https://github.com/Fraud-Detection-Handbook/simulated-data
 
@@ -50,7 +68,8 @@ def read_data(start: [str, datetime] = "2018-04-01",
   Args:
     start (str|datetime): start of range (inclusive) of days that should be
     used to construct the dataset. Either a python datetime or a string in
-    format "%Y-%m-%d"
+    format "%Y-%m-%d". The default value is the first day in the
+    pre-generated dataset.
     end (str|datetime): end of range (exclusive), type same as `start`.
   """
   data_dir = 'simulated-data-transformed/data'
@@ -122,7 +141,8 @@ if __name__ == '__main__':
 
   transactions_df = read_data(end="2018-04-30")
   print("read", transactions_df.shape, 'transactions')
-  train_df, test_df = train_test_split(transactions_df, days_train=20, delay=5, days_test=5)
+  train_df, test_df = train_test_split(transactions_df, days_train=20, delay=5,
+                                       days_test=5)
   print("train set", train_df.shape, "containing", train_df['TX_FRAUD'].sum(),
         "fraudulent transactions")
   print("test set", test_df.shape, "containing", test_df['TX_FRAUD'].sum(),
@@ -156,6 +176,4 @@ if __name__ == '__main__':
     train_table.write_tensor(batch_X,
                              ["cf1:" + column for column in input_features],
                              row_keys)
-    train_table.write_tensor(batch_y,
-                             ["cf1:" + output_feature],
-                             row_keys)
+    train_table.write_tensor(batch_y, ["cf1:" + output_feature], row_keys)
