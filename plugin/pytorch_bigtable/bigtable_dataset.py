@@ -102,9 +102,14 @@ class BigtableTable:
         tensor.
 
     """
+    if tensor.dim() != 2:
+      raise ValueError("`tensor` must have exactly two dimensions")
 
-    if not len(columns) != tensor.shape[0]:
-      raise ValueError("`columns` must have the same length as tensor.shape[0]")
+    if len(row_keys) != tensor.shape[0]:
+      raise ValueError("`row_keys` must have the same length as tensor.shape[0]")
+
+    if len(columns) != tensor.shape[1]:
+      raise ValueError("`columns` must have the same length as tensor.shape[1]")
 
     for i, column_id in enumerate(columns):
       if len(column_id.split(":")) != 2:
