@@ -17,7 +17,7 @@
 # disable class docstring for tests
 # pylint: disable=C0115
 from unittest import TestCase
-from pbt_C import _get_worker_start_index
+from pytorch_bigtable.pbt_C import _get_worker_start_index
 
 
 class IndexGenerationTest(TestCase):
