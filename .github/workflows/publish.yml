@@ -14,13 +14,16 @@
 name: Publish
 
 on:
+  # for now, to test it build on every push. Manual dispatch works only when workflow is on master branch
+  push:
+    branches: [ kb/publish ]
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
 
   call-workflow:
-    uses: Unoperate/pytorch-cbt/.github/workflows/docker-image.yml@kb/publish
+    uses: Unoperate/pytorch-cbt/.github/workflows/build_and_test.yml@kb/publish
 
   publish:
 
