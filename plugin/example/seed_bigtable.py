@@ -14,7 +14,7 @@
 #
 # We provide an example of training a NN for fraud detection using data
 # stored in BigTable in `fraud_example.py`. To showcase what our plugin does,
-# we focus on **reading** the data that is already in BigTable,
+# we focus on **reading** the data that is already in Google Cloud Bigtable,
 # while training the network.
 #
 # The code in this file is used to upload the data and is by no means
@@ -155,8 +155,8 @@ if __name__ == '__main__':
   test_df.to_csv('test_df.csv', index=False)
 
   print("Seed bigtable")
-  os.environ["BIGTABLE_EMULATOR_HOST"] = "172.17.0.1:8086"
-  client = pbt.BigtableClient("unoperate-test", "172.17.0.1:8086", endpoint="")
+  os.environ["BIGTABLE_EMULATOR_HOST"] = "127.0.0.1:8086"
+  client = pbt.BigtableClient("unoperate-test", "127.0.0.1:8086", endpoint="")
   train_table = client.get_table("train")
 
   BATCH_SIZE = 1000

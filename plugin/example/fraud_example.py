@@ -11,9 +11,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+#
+#
+# This is an example of training a NN for fraud detection using data
+# stored in Google Cloud Bigtable.
+#
+# We use train data prepared in `seed_bigtable.py`. It can be either loaded
+# as a CSV or downloaded directly from Google Cloud Bigtable.
+#
+# First, a fully connected Neural Network is initialized and tested on the
+# test data loaded from the CSV. The metrics are average precision and a
+# precision/recall curve stored in a file before.png.
+#
+# Next, we train the network using a pytorch dataset that connects to Bigtable.
+#
+# Last, we evaluate the network again, using the test dataset.
+#
+#
 # This example is based on data from:
 # https://github.com/Fraud-Detection-Handbook/simulated-data
+# For more information please refer to comments in `seed_bigtable.py`.
 
 import os
 import argparse
@@ -23,6 +40,8 @@ from tqdm import tqdm
 from sklearn.metrics import average_precision_score, precision_recall_curve
 from matplotlib import pyplot as plt
 import pytorch_bigtable as pbt
+import pytorch_bigtable.row_set
+import pytorch_bigtable.row_range
 import pandas as pd
 
 output_feature = "TX_FRAUD"
@@ -126,14 +145,13 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser("fraud_example.py")
   parser.add_argument("-b", "--use_bigtable",
                       help="specifies if training data is taken from bigtable "
-                           "database.",
-                      action='store_true')
+                           "database.", action='store_true')
   args = parser.parse_args()
 
   if args.use_bigtable:
     print("connecting to BigTable")
-    os.environ["BIGTABLE_EMULATOR_HOST"] = "172.17.0.1:8086"
-    client = pbt.BigtableClient("unoperate-test", "172.17.0.1:8086",
+    os.environ["BIGTABLE_EMULATOR_HOST"] = "127.0.0.1:8086"
+    client = pbt.BigtableClient("unoperate-test", "127.0.0.1:8086",
                                 endpoint="")
 
     train_table = client.get_table("train")
@@ -157,7 +175,8 @@ if __name__ == "__main__":
   learning_rate = 2e-3
   batch_size = 10000
 
-  train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size)
+  train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
+                                             num_workers=5)
   optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
