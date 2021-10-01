@@ -22,11 +22,11 @@ on:
 
 jobs:
 
-  call-workflow:
+  call-build-workflow:
     uses: Unoperate/pytorch-cbt/.github/workflows/build_and_test.yml@kb/publish
 
   publish:
-
+    needs: call-build-workflow
     runs-on: ubuntu-latest
 
     steps:
