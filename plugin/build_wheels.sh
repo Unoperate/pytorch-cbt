@@ -11,3 +11,4 @@ for wheel_file in ./$OUTPUT_DIR/*
 do
   mv $wheel_file "${wheel_file/linux/manylinux2014}"
 done
+
