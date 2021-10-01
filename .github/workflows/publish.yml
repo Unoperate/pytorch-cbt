@@ -19,7 +19,15 @@ on:
 
 jobs:
 
+
   build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/build_and_test@action_v1
+
+  release:
 
     runs-on: ubuntu-latest
 
@@ -30,23 +38,23 @@ jobs:
       id: image-cache
       uses: actions/cache@v2
       with:
-        path: ~/pythorch_cbt_devel.tar
-        key: ${{ runner.os }}-docker-image-${{ hashFiles('Dockerfile', '.dockerignore', 'install-cloud-sdk.sh') }}
+        path: ~/pythorch_cbt_release.tar
+        key: ${{ runner.os }}-docker-image-release-${{ hashFiles('Dockerfile', '.dockerignore', 'install-cloud-sdk.sh') }}
     
     - name: Build the Docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
-      run: docker build -t pythorch_cbt_devel .
+      run: docker build --file centos7.Dockerfile -t pythorch_cbt_release .
     
     - name: tar docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
-      run: docker save --output ~/pythorch_cbt_devel.tar pythorch_cbt_devel
+      run: docker save --output ~/pythorch_cbt_release.tar pythorch_cbt_release
       
     - name: load image
       if: steps.image-cache.outputs.cache-hit == 'true'
-      run: docker load --input ~/pythorch_cbt_devel.tar
+      run: docker load --input ~/pythorch_cbt_release.tar
 
     - name: Run tests
-      run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_devel /opt/pytorch/build_wheels.sh
+      run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_release /opt/pytorch/build_wheels.sh
 
     - name: Publish distribution 📦 to Test PyPI
       uses: pypa/gh-action-pypi-publish@master
