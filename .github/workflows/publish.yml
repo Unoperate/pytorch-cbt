@@ -19,7 +19,10 @@ on:
 
 jobs:
 
-  build:
+  call-workflow:
+    uses: Unoperate/pytorch-cbt/.github/workflows/docker-image.yml@kb/publish
+
+  publish:
 
     runs-on: ubuntu-latest
 
@@ -46,14 +49,14 @@ jobs:
       run: docker load --input ~/pythorch_cbt_devel.tar
 
     - name: Run tests
-      run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_devel /opt/pytorch/build_wheels.sh
+      run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_devel /opt/pytorch/ci/check.sh
 
-    - name: Publish distribution 📦 to Test PyPI
-      uses: pypa/gh-action-pypi-publish@master
-      with:
-        user: __token__
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        repository_url: https://test.pypi.org/legacy/
-        packages_dir: /opt/pytorch/plugin/dist/
-        verbose: true
+#    - name: Publish distribution 📦 to Test PyPI
+#      uses: pypa/gh-action-pypi-publish@master
+#      with:
+#        user: __token__
+#        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+#        repository_url: https://test.pypi.org/legacy/
+#        packages_dir: /opt/pytorch/plugin/dist/
+#        verbose: true
 
