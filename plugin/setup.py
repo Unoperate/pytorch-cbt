@@ -4,6 +4,7 @@ import setuptools.command.egg_info
 import setuptools.command.build_py
 from torch.utils import cpp_extension
 import os
+import sys
 import glob
 
 extra_compile_args = os.popen(
@@ -37,7 +38,8 @@ class BuildExtCommand(cpp_extension.BuildExtension):
     print("looking for libs")
 
     file_list = glob.glob(
-      os.path.join("build", "lib*", "pytorch_bigtable", "pbt_C.cpython*"))
+      os.path.join("build", f"lib.linux-x86_64-3.{sys.version_info.minor}",
+                   "pytorch_bigtable", "pbt_C.cpython*"))
     if len(file_list) != 1:
       raise RuntimeError(
         "Error when looking for C extension .so file. Expected to find 1 "
