@@ -15,52 +15,75 @@
 # A lot of the code here is "borrowed" from the
 # https://github.com/googleapis/google-cloud-cpp project.
 
-FROM ubuntu:focal
+FROM quay.io/pypa/manylinux2014_x86_64
 ARG NCPU=4
 
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && \
-    apt-get --no-install-recommends install -y \
-        apt-transport-https \
-        apt-utils \
-        automake \
-        build-essential \
-        ca-certificates \
-        clang-10 \
-        clang-format-10 \
-        clang-tidy-10 \
-        cmake \
-        curl \
-        g++ \
-        gawk \
-        gcc \
-        git \
-        less \
-        libc-ares-dev \
-        libc-ares2 \
-        libcurl4-openssl-dev \
-        libssl-dev \
-        libtool \
-        llvm-10 \
-        lsb-release \
-        m4 \
-        make \
-        ninja-build \
-        patch \
-        pkg-config \
-        python3 \
-        python3-dev \
-        python3-pip \
-        tar \
-        unzip \
-        vim \
-        wget \
-        zip \
-        zlib1g-dev
+# ```bash
+RUN yum install -y centos-release-scl yum-utils
+RUN yum-config-manager --enable rhel-server-rhscl-7-rpms
+RUN yum makecache && \
+    yum install -y \
+	automake \
+	ccache \
+	cmake3 \
+	curl-devel \
+	devtoolset-7 \
+	gawk \
+	gcc \
+	gcc-c++ \
+    git \
+    less \
+    m4 \
+	make \
+	ninja-build \
+	openssl-devel \
+	patch \
+    python3-devel \
+	tar \
+	unzip \
+	vim \
+	wget \
+	which \
+	zip \
+	zlib-devel
+
+
+RUN ln -sf /usr/bin/cmake3 /usr/bin/cmake && ln -sf /usr/bin/ctest3 /usr/bin/ctest
+# ```
+
+# CentOS-7 ships with `pkg-config` 0.27.1, which has a
+# [bug](https://bugs.freedesktop.org/show_bug.cgi?id=54716) that can make
+# invocations take extremely long to complete. If you plan to use `pkg-config`
+# with any of the installed artifacts, you'll want to upgrade it to something
+# newer. If not, `yum install pkgconfig` should work instead.
+
+# ```bash
+WORKDIR /var/tmp/build/pkg-config-cpp
+RUN curl -sSL https://pkgconfig.freedesktop.org/releases/pkg-config-0.29.2.tar.gz | \
+    tar -xzf - --strip-components=1 && \
+    ./configure --with-internal-glib && \
+    make -j ${NCPU:-4} && \
+    make install && \
+    ldconfig
+# ```
+
+
+# The following steps will install libraries and tools in `/usr/local`. By
+# default CentOS-7 does not search for shared libraries in these directories,
+# there are multiple ways to solve this problem, the following steps are one
+# solution:
+
+# ```bash
+RUN (echo "/usr/local/lib" ; echo "/usr/local/lib64") | \
+    tee /etc/ld.so.conf.d/usrlocal.conf
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig:/usr/lib64/pkgconfig
+ENV PATH=/usr/local/bin:${PATH}
+# ```
 
 # Install Python packages
-RUN update-alternatives --install /usr/bin/python python $(which python3) 10
-RUN pip3 install setuptools wheel pylint
+RUN update-alternatives --install /usr/bin/python python /opt/python/cp39-cp39/bin/python 10
+RUN update-alternatives --install /usr/bin/pip pip /opt/python/cp39-cp39/bin/pip 10
+RUN pip install setuptools wheel pylint
 
 # Install the Cloud SDK and some of the emulators. We use the emulators to run
 # integration tests.
@@ -88,6 +111,21 @@ ENV PATH=${CLOUD_SDK_LOCATION}/bin:${PATH}
 # `_GLIBCXX_USE_CXX11_ABI` incompatibility. However, the end result is a library
 # loaded by python, so we need to compile the code as position independent
 # (hence CMAKE_POSITION_INDEPENDENT_CODE is set to ON).
+
+# #### c-ares
+
+# Recent versions of gRPC require c-ares >= 1.11, while CentOS-7
+# distributes c-ares-1.10. Manually install a newer version:
+
+WORKDIR /var/tmp/build/c-ares
+RUN curl -sSL https://github.com/c-ares/c-ares/archive/cares-1_14_0.tar.gz | \
+    tar -xzf - --strip-components=1 && \
+    ./buildconf && \
+    CXXFLAGS='-D_GLIBCXX_USE_CXX11_ABI=0' \ 
+    ./configure --with-pic --disable-shared && \
+    make -j ${NCPU:-4} && \
+    make install && \
+    ldconfig
 
 # libre2 is required by gRPC
 WORKDIR /var/tmp/build/re2
@@ -212,10 +250,8 @@ RUN curl -sSL \
   ldconfig
 
 # pyTorch
-RUN pip3 install \
+RUN pip install \
       torch==1.9.0+cpu \
-      torchvision==0.10.0+cpu \
-      torchaudio==0.9.0 \
       -f https://download.pytorch.org/whl/torch_stable.html
 
 WORKDIR /opt/pytorch
