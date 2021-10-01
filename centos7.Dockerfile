@@ -80,11 +80,6 @@ ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig:/usr/lib
 ENV PATH=/usr/local/bin:${PATH}
 # ```
 
-# Install Python packages
-RUN update-alternatives --install /usr/bin/python python /opt/python/cp39-cp39/bin/python 10
-RUN update-alternatives --install /usr/bin/pip pip /opt/python/cp39-cp39/bin/pip 10
-RUN pip install setuptools wheel pylint
-
 # Install the Cloud SDK and some of the emulators. We use the emulators to run
 # integration tests.
 COPY install-cloud-sdk.sh /var/tmp/ci/
@@ -248,10 +243,5 @@ RUN curl -sSL \
   cmake --build cmake-out -j ${NCPU:-4} && \
   cmake --install cmake-out --component google_cloud_cpp_development && \
   ldconfig
-
-# pyTorch
-RUN pip install \
-      torch==1.9.0+cpu \
-      -f https://download.pytorch.org/whl/torch_stable.html
 
 WORKDIR /opt/pytorch
