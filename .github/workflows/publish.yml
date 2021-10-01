@@ -14,19 +14,16 @@
 name: Publish
 
 on:
-  # for now, to test it build on every push. Manual dispatch works only when workflow is on master branch
-  push:
-    branches: [ kb/publish ]
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
 
-  call-workflow:
-    uses: Unoperate/pytorch-cbt/.github/workflows/build_and_test.yml@kb/publish
+  call-build-workflow:
+    uses: Unoperate/pytorch-cbt/.github/workflows/build_and_test.yml@master
 
   publish:
-
+    needs: call-build-workflow
     runs-on: ubuntu-latest
 
     steps:
@@ -41,7 +38,7 @@ jobs:
     
     - name: Build the Docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
-      run: docker build -t --file centos7.Dockerfile pythorch_cbt_release .
+      run: docker build -t pythorch_cbt_release --file centos7.Dockerfile .
     
     - name: tar docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
