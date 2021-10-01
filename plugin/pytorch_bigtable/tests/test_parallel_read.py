@@ -16,6 +16,8 @@
 # pylint: disable=C0114
 # disable class docstring for tests
 # pylint: disable=C0115
+# disable warning for accessing protected members
+# pylint: disable=W0212
 import unittest
 import torch
 import os
@@ -33,19 +35,24 @@ class BigtableParallelReadTest(unittest.TestCase):
 
   def test_read(self):
     os.environ['BIGTABLE_EMULATOR_HOST'] = self.emulator.get_addr()
+
+    num_rows = 300
+
     self.emulator.create_table('fake_project', 'fake_instance', 'test-table',
                                ['fam1', 'fam2'],
-                               ['row' + str(i).rjust(3, '0') for i in range(20)
-                                if i % 7 == 0])
+                               ['row' + str(i).rjust(3, '0') for i in
+                                range(0, num_rows, 30)])
 
-    ten = torch.Tensor(list(range(40))).reshape(20, 2)
+    ten = torch.Tensor(list(range(num_rows * 2))).reshape(num_rows, 2)
 
     client = BigtableClient('fake_project', 'fake_instance',
                             endpoint=self.emulator.get_addr())
     table = client.get_table('test-table')
 
     table.write_tensor(ten, ['fam1:col1', 'fam2:col2'],
-                       ['row' + str(i).rjust(3, '0') for i in range(20)])
+                       ['row' + str(i).rjust(3, '0') for i in range(num_rows)])
+
+    table = client.get_table('test-table')
 
     ds = table.read_rows(torch.float32, ['fam1:col1', 'fam2:col2'],
                          row_set.from_rows_or_ranges(row_range.infinite()))
@@ -54,6 +61,25 @@ class BigtableParallelReadTest(unittest.TestCase):
     output = []
     for tensor in loader:
       output.append(tensor)
-    output = sorted(output,key= lambda x: x[0,0].item())
+    output = sorted(output, key=lambda x: x[0, 0].item())
     output = torch.cat(output)
     self.assertTrue((ten == output).all())
+
+  def test_sample_row_keys(self):
+    os.environ['BIGTABLE_EMULATOR_HOST'] = self.emulator.get_addr()
+    self.emulator.create_table('fake_project', 'fake_instance', 'test-table',
+                               ['fam1', 'fam2'],
+                               ['row' + str(i).rjust(3, '0') for i in
+                                range(0, 500, 50)])
+
+    ten = torch.Tensor(list(range(500))).reshape(250, 2)
+
+    client = BigtableClient('fake_project', 'fake_instance',
+                            endpoint=self.emulator.get_addr())
+    table = client.get_table('test-table')
+
+    table.write_tensor(ten, ['fam1:col1', 'fam2:col2'],
+                       ['row' + str(i).rjust(3, '0') for i in range(250)])
+
+    table = client.get_table('test-table')
+    self.assertGreater(len(table._sample_row_keys), 0)
