@@ -41,7 +41,7 @@ jobs:
     
     - name: Build the Docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
-      run: docker build -t --file centos7.Dockerfile pythorch_cbt_release .
+      run: docker build -t pythorch_cbt_release --file centos7.Dockerfile .
     
     - name: tar docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
