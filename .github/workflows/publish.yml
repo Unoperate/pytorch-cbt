@@ -34,7 +34,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/pythorch_cbt_release.tar
-        key: ${{ runner.os }}-docker-image-release-${{ hashFiles('Dockerfile', '.dockerignore', 'install-cloud-sdk.sh') }}
+        key: ${{ runner.os }}-docker-image-release-${{ hashFiles('centos7.Dockerfile') }}
     
     - name: Build the Docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
