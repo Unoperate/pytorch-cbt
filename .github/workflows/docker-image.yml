@@ -34,7 +34,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/pythorch_cbt_devel.tar
-        key: ${{ runner.os }}-docker-image-${{ hashFiles('Dockerfile', '.dockerignore', 'install-cloud-sdk.sh') }}
+        key: ${{ runner.os }}-docker-image-devel-${{ hashFiles('Dockerfile', '.dockerignore', 'install-cloud-sdk.sh') }}
     
     - name: Build the Docker image
       if: steps.image-cache.outputs.cache-hit != 'true'
