@@ -21,13 +21,13 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 
 class BuildExtCommand(cpp_extension.BuildExtension):
-  """Extension for patching .so files to wheel
+  """Extension for including .so files in the wheel.
   
   The reason we need to do this, is our extension has dynamic 
   dependencies to some libraries as well as to libraries from pytorch. For 
   that reason, we can"t use auditwheel which does not accept such 
   dependencies to another package. What we do instead, is look for the 
-  dynamic dependencies not from pytorch manually and then patch them as part 
+  dynamic dependencies not from pytorch manually and then include them as part
   of our wheel.
   """
 
@@ -36,7 +36,12 @@ class BuildExtCommand(cpp_extension.BuildExtension):
 
     print("looking for libs")
 
-    file_list = glob.glob("build/lib*/pytorch_bigtable/pbt_C.cpython*")
+    file_list = glob.glob(
+      os.path.join("build", "lib*", "pytorch_bigtable", "pbt_C.cpython*"))
+    if len(file_list) != 1:
+      raise RuntimeError(
+        "Error when looking for C extension .so file. Expected to find 1 "
+        f"file, found {len(file_list)}.")
     so_file_loc = file_list[0]
     lib_dir = os.path.join(os.path.dirname(so_file_loc), "lib")
 
@@ -58,7 +63,7 @@ class BuildExtCommand(cpp_extension.BuildExtension):
 
 
 setup(name="pytorch_bigtable", version="0.0.1", author="Google",
-      author_email="support@gmail.com",
+      author_email="info@unoperate.com",
       description="Pytorch Extension for BigTable",
       long_description=long_description,
       url="https://github.com/Unoperate/pytorch-cbt",
