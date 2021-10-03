@@ -88,7 +88,8 @@ class BigtableTable:
                                                   self._app_profile_id)
 
   def write_tensor(self, tensor: torch.Tensor, columns: List[str],
-                   row_keys: Union[List[str], Callable[[torch.Tensor, int], str]]):
+                   row_keys: Union[
+                     List[str], Callable[[torch.Tensor, int], str]]):
     """Opens a connection and writes data from tensor.
 
     Args:
