@@ -181,11 +181,10 @@ py::list SampleRowKeys(py::object const& client, std::string const& table_id,
 std::string getRowKey(
     torch::Tensor const& tensor, int i,
     std::optional<py::list> const& row_key_list,
-    std::optional<std::function<std::string(torch::Tensor const&)>> const&
+    std::optional<std::function<std::string(torch::Tensor const&, int)>> const&
         row_key_callable) {
   if (row_key_list) return (*row_key_list)[i].cast<std::string>();
-  std::cout << "getting slice " << i << ":" << (i + 1) << "\n";
-  return (*row_key_callable)(tensor.slice(0, i, i + 1));
+  return (*row_key_callable)(tensor.slice(0, i, i + 1), i);
 }
 
 void WriteTensor(
@@ -193,7 +192,7 @@ void WriteTensor(
     std::optional<std::string> const& app_profile_id,
     torch::Tensor const& tensor, py::list const& columns,
     std::optional<py::list> const& row_key_list,
-    std::optional<std::function<std::string(torch::Tensor const&)>> const&
+    std::optional<std::function<std::string(torch::Tensor const&, int)>> const&
         row_key_callable) {
   std::shared_ptr<cbt::DataClient> data_client = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);

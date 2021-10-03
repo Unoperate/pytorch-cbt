@@ -120,7 +120,7 @@ class BigtableWriteTest(unittest.TestCase):
                             endpoint=self.emulator.get_addr())
     table = client.get_table("test-table")
 
-    def row_callback(tensor):
+    def row_callback(tensor, index):
       return "row" + str(random.randint(1000, 9999)).rjust(4, "0")
 
     table.write_tensor(ten, ["fam1:col1", "fam2:col2"], row_callback)
