@@ -98,8 +98,11 @@ class BigtableTable:
             [ "column_family_a:column_name_a",
             "column_family_a:column_name_b",
             ...]
-        row_keys: list of row_keys that should be used for the rows in the
-        tensor.
+        row_keys: a list or a callback.
+        If a list, it is a set of row_keys
+        that should be used for the rows in the tensor.
+        If a callback, it is called with the `tensor`'s row and is
+        expected to return a row_key for that row.
 
     """
     if tensor.dim() != 2:
@@ -128,9 +131,8 @@ class BigtableTable:
 
   def read_rows(self, cell_type: torch.dtype, columns: List[str],
                 row_set: pbt_C.RowSet,
-                versions: pbt_C.Filter = filters.latest(),
-                default_value: Union[int, float] = None) -> \
-                torch.utils.data.IterableDataset:
+                versions: pbt_C.Filter = filters.latest(), default_value: Union[
+        int, float] = None) -> torch.utils.data.IterableDataset:
     """Returns a `CloudBigtableIterableDataset` object.
 
     Args:
