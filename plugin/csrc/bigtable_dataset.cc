@@ -2,6 +2,7 @@
 #include <google/cloud/bigtable/table_admin.h>
 #include <google/protobuf/text_format.h>
 #include <grpcpp/security/credentials.h>
+#include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <rpc/rpc.h> /* xdr is a sub-library of rpc */
@@ -177,15 +178,28 @@ py::list SampleRowKeys(py::object const& client, std::string const& table_id,
   return res;
 }
 
-void WriteTensor(py::object const& client, std::string const& table_id,
-                 std::optional<std::string> const& app_profile_id,
-                 torch::Tensor const& tensor, py::list const& columns,
-                 py::list const& row) {
+std::string getRowKey(
+    torch::Tensor const& tensor, int i,
+    std::optional<py::list> const& row_key_list,
+    std::optional<std::function<std::string(torch::Tensor const&)>> const&
+        row_key_callable) {
+  if (row_key_list) return (*row_key_list)[i].cast<std::string>();
+  std::cout << "getting slice " << i << ":" << (i + 1) << "\n";
+  return (*row_key_callable)(tensor.slice(0, i, i + 1));
+}
+
+void WriteTensor(
+    py::object const& client, std::string const& table_id,
+    std::optional<std::string> const& app_profile_id,
+    torch::Tensor const& tensor, py::list const& columns,
+    std::optional<py::list> const& row_key_list,
+    std::optional<std::function<std::string(torch::Tensor const&)>> const&
+        row_key_callable) {
   std::shared_ptr<cbt::DataClient> data_client = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
   for (int i = 0; i < tensor.size(0); i++) {
-    auto row_key = row[i].cast<std::string>();
+    auto row_key = getRowKey(tensor, i, row_key_list, row_key_callable);
 
     for (int j = 0; j < tensor.size(1); j++) {
       auto col_name_full = columns[j].cast<std::string>();
@@ -393,7 +407,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("write_tensor", &WriteTensor, "write tensor to BigTable",
         py::arg("client"), py::arg("table_id"),
         py::arg("app_profile_id") = py::none(), py::arg("tensor"),
-        py::arg("columns"), py::arg("row_keys"));
+        py::arg("columns"), py::arg("row_key_list"),
+        py::arg("row_key_callable"));
 
   py::class_<BigtableDatasetIterator>(m, "Iterator")
       .def(py::init<py::object, std::string, std::optional<std::string>,

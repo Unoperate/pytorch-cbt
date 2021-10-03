@@ -1,7 +1,7 @@
 """Module containing core functionality of pytorch bigtable dataset"""
 import torch
 import pbt_C
-from typing import List, Union
+from typing import List, Union, Callable
 import pytorch_bigtable.version_filters as filters
 
 
@@ -88,7 +88,7 @@ class BigtableTable:
                                                   self._app_profile_id)
 
   def write_tensor(self, tensor: torch.Tensor, columns: List[str],
-                   row_keys: List[str]):
+                   row_keys: Union[List[str], Callable[[torch.Tensor], str]]):
     """Opens a connection and writes data from tensor.
 
     Args:
@@ -105,7 +105,7 @@ class BigtableTable:
     if tensor.dim() != 2:
       raise ValueError("`tensor` must have exactly two dimensions")
 
-    if len(row_keys) != tensor.shape[0]:
+    if isinstance(row_keys, List) and len(row_keys) != tensor.shape[0]:
       raise ValueError(
         "`row_keys` must have the same length as tensor.shape[0]")
 
@@ -116,9 +116,15 @@ class BigtableTable:
       if len(column_id.split(":")) != 2:
         raise ValueError(f"`columns[{i}]` must be a string in format:"
                          " \"column_family:column_name\"")
+    row_key_list = None
+    row_key_callable = None
+    if callable(row_keys):
+      row_key_callable = row_keys
+    else:
+      row_key_list = row_keys
 
     pbt_C.write_tensor(self._client, self._table_id, self._app_profile_id,
-                       tensor, columns, row_keys)
+                       tensor, columns, row_key_list, row_key_callable)
 
   def read_rows(self, cell_type: torch.dtype, columns: List[str],
                 row_set: pbt_C.RowSet,
