@@ -16,6 +16,8 @@
 # pylint: disable=C0114
 # disable class docstring for tests
 # pylint: disable=C0115
+# disable unused parameter for callback
+# pylint: disable=W0613
 import random
 import unittest
 import torch
