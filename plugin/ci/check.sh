@@ -20,6 +20,8 @@ find \( -name \*.cc -o -name \*.h \) -print0 \
 
 cd "$PROJECT_DIR"
 
+echo "0.0.0" > version.txt
+
 log "Compiling the project"
 cd "$PROJECT_DIR"
 python3 setup.py develop
