@@ -90,20 +90,25 @@ class BigtableTable:
   def write_tensor(self, tensor: torch.Tensor, columns: List[str],
                    row_keys: Union[
                      List[str], Callable[[torch.Tensor, int], str]]):
-    """Opens a connection and writes data from tensor.
+    """Opens a connection and writes data from tensor. Each row of this
+    tensor will become a row in Bigtable so you should provide as many
+    row-keys as tensor.shape(1). Please note that using this function is
+    strongly discouraged for large amounts of data. Because it creates a new
+    connection every time it is called, it has a non-trivial constant cost,
+    so calling it thousands times is not the greatest idea.
 
     Args:
-        tensor: Two dimentional PyTorch Tensor.
+        tensor: Two dimensional PyTorch Tensor.
         columns: List with names of the columns in the table that
             should be read, i.e:
             [ "column_family_a:column_name_a",
             "column_family_a:column_name_b",
             ...]
         row_keys: a list or a callback.
-        If a list, it is a set of row_keys
-        that should be used for the rows in the tensor.
-        If a callback, it is called with the `tensor`'s row and index and is
-        expected to return a row_key for that row.
+          If a list, it is a set of row_keys
+          that should be used for the rows in the tensor.
+          If a callback, it is called with the `tensor`'s row and index and is
+          expected to return a row_key for that row.
 
     """
     if tensor.dim() != 2:

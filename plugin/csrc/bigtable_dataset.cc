@@ -178,13 +178,13 @@ py::list SampleRowKeys(py::object const& client, std::string const& table_id,
   return res;
 }
 
-std::string getRowKey(
+std::string rowKeyForTensor(
     torch::Tensor const& tensor, int i,
     std::optional<py::list> const& row_key_list,
     std::optional<std::function<std::string(torch::Tensor const&, int)>> const&
-        row_key_callable) {
+        row_key_generator) {
   if (row_key_list) return (*row_key_list)[i].cast<std::string>();
-  return (*row_key_callable)(tensor.slice(0, i, i + 1), i);
+  return (*row_key_generator)(tensor.slice(0, i, i + 1), i);
 }
 
 void WriteTensor(
@@ -193,12 +193,12 @@ void WriteTensor(
     torch::Tensor const& tensor, py::list const& columns,
     std::optional<py::list> const& row_key_list,
     std::optional<std::function<std::string(torch::Tensor const&, int)>> const&
-        row_key_callable) {
+        row_key_generator) {
   std::shared_ptr<cbt::DataClient> data_client = CreateDataClient(client);
   auto table = CreateTable(data_client, table_id, app_profile_id);
 
   for (int i = 0; i < tensor.size(0); i++) {
-    auto row_key = getRowKey(tensor, i, row_key_list, row_key_callable);
+    auto row_key = rowKeyForTensor(tensor, i, row_key_list, row_key_generator);
 
     for (int j = 0; j < tensor.size(1); j++) {
       auto col_name_full = columns[j].cast<std::string>();
@@ -407,7 +407,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         py::arg("client"), py::arg("table_id"),
         py::arg("app_profile_id") = py::none(), py::arg("tensor"),
         py::arg("columns"), py::arg("row_key_list"),
-        py::arg("row_key_callable"));
+        py::arg("row_key_generator"));
 
   py::class_<BigtableDatasetIterator>(m, "Iterator")
       .def(py::init<py::object, std::string, std::optional<std::string>,

@@ -122,14 +122,16 @@ class BigtableWriteTest(unittest.TestCase):
                             endpoint=self.emulator.get_addr())
     table = client.get_table("test-table")
 
+    row_keys_list = ["row" + str(random.randint(1000, 9999)).rjust(4, "0") for _
+                     in range(20)]
+
     def row_callback(tensor, index):
-      return "row" + str(random.randint(1000, 9999)).rjust(4, "0")
+      return row_keys_list[index]
 
     table.write_tensor(ten, ["fam1:col1", "fam2:col2"], row_callback)
     results = []
     for tensor in table.read_rows(torch.float32, ["fam1:col1", "fam2:col2"],
-                                  row_set.from_rows_or_ranges(
-                                    row_range.infinite())):
+                                  row_set.from_rows_or_ranges(*row_keys_list)):
       results.append(tensor.reshape(1, -1))
     results = sorted(results, key=lambda x: x[0, 0].item())
     result = torch.cat(results)
