@@ -25,6 +25,8 @@ jobs:
 
   call-build-workflow:
     uses: Unoperate/pytorch-cbt/.github/workflows/build_and_test.yml@master
+    with:
+      tag: 'v${{ github.event.inputs.release_number }}'
 
   publish:
     needs: call-build-workflow
@@ -33,7 +35,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
       with:
-        ref: v${{ github.event.inputs.release_branch }}
+        ref: 'v${{ github.event.inputs.release_number }}'
     
     - name: Cache dockerimage
       id: image-cache
@@ -55,7 +57,7 @@ jobs:
       run: docker load --input ~/pythorch_cbt_release.tar
 
     - name: set version
-      run: echo "${{ github.event.inputs.release_branch }}" > ./plugin/version.txt
+      run: echo "${{ github.event.inputs.release_number }}" > ./plugin/version.txt
 
     - name: Run tests
       run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_release /opt/pytorch/build_wheels.sh
