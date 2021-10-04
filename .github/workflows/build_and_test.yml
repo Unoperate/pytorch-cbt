@@ -19,6 +19,11 @@ on:
   pull_request:
     branches: [ master ]
   workflow_call:
+    inputs:
+      tag:
+        description: 'tag to checkout'
+        required: true
+        type: string
 
 jobs:
 
@@ -28,6 +33,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      if: steps.image-cache.outputs.cache-hit
+      with:
+        ref: ${{ inputs.tag }}
     
     - name: Cache dockerimage
       id: image-cache
