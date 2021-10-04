@@ -20,6 +20,8 @@ INCLUDE_LIBS = ["libssl", "libcrypto"]
 with open("README.md", "r", encoding="utf-8") as fh:
   long_description = fh.read()
 
+with open("version.txt", "r", encoding="utf-8") as fh:
+  version=fh.read()
 
 class BuildExtCommand(cpp_extension.BuildExtension):
   """Extension for including .so files in the wheel.
@@ -64,7 +66,7 @@ class BuildExtCommand(cpp_extension.BuildExtension):
           os.system(f"cp {lib_loc} {lib_dir}")
 
 
-setup(name="pytorch_bigtable", version="0.0.1", author="Google",
+setup(name="pytorch_bigtable", version=version, author="Google",
       author_email="info@unoperate.com",
       description="Pytorch Extension for BigTable",
       long_description=long_description,

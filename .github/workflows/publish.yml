@@ -16,6 +16,10 @@ name: Publish
 on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      release_number:
+        description: 'release in format: major.minor.micro'
+        required: true
 
 jobs:
 
@@ -28,6 +32,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      with:
+        ref: v${{ github.event.inputs.release_branch }}
     
     - name: Cache dockerimage
       id: image-cache
@@ -47,6 +53,9 @@ jobs:
     - name: load image
       if: steps.image-cache.outputs.cache-hit == 'true'
       run: docker load --input ~/pythorch_cbt_release.tar
+
+    - name: set version
+      run: echo "${{ github.event.inputs.release_branch }}" > ./plugin/version.txt
 
     - name: Run tests
       run: docker run --rm  --volume "`pwd`/plugin:/opt/pytorch" pythorch_cbt_release /opt/pytorch/build_wheels.sh
