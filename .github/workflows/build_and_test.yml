@@ -33,7 +33,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-      if: steps.image-cache.outputs.cache-hit
       with:
         ref: ${{ inputs.tag }}
     
