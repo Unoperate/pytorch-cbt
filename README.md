@@ -22,6 +22,10 @@ and mount the `plugin` folder. From there you can just run:
 python setup.py develop
 ```
 
-## Releasing
+## Releases
 The releases are maintained in the following way:
-TODO
+Every major release gets its own branch and then all smaller releases get 
+their own tags. To publish the release, first the `Publish` workflow is run, 
+compiling the wheels, uploading them to pypi and saving them as workflow 
+artifacts. Then, these wheels are also described and attached to the release 
+note on github.
