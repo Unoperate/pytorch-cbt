@@ -18,7 +18,7 @@
 # pylint: disable=C0115
 from unittest import TestCase
 from pytorch_bigtable import row_set, row_range
-from pbt_C import _compute_row_set_for_worker
+from pytorch_bigtable.pbt_C import _compute_row_set_for_worker
 
 
 class ComputeRowSetForWorkerTest(TestCase):
