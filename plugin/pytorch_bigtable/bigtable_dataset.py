@@ -1,7 +1,7 @@
 """Module containing core functionality of pytorch bigtable dataset"""
 import torch
 import pbt_C
-from typing import List, Union
+from typing import List, Union, Callable
 import pytorch_bigtable.version_filters as filters
 
 
@@ -88,24 +88,33 @@ class BigtableTable:
                                                   self._app_profile_id)
 
   def write_tensor(self, tensor: torch.Tensor, columns: List[str],
-                   row_keys: List[str]):
-    """Opens a connection and writes data from tensor.
+                   row_keys: Union[
+                     List[str], Callable[[torch.Tensor, int], str]]):
+    """Opens a connection and writes data from tensor. Each row of this
+    tensor will become a row in Bigtable so you should provide as many
+    row-keys as tensor.shape(1). Please note that using this function is
+    strongly discouraged for large amounts of data. Because it creates a new
+    connection every time it is called, it has a non-trivial constant cost,
+    so calling it thousands times is not the greatest idea.
 
     Args:
-        tensor: Two dimentional PyTorch Tensor.
+        tensor: Two dimensional PyTorch Tensor.
         columns: List with names of the columns in the table that
             should be read, i.e:
             [ "column_family_a:column_name_a",
             "column_family_a:column_name_b",
             ...]
-        row_keys: list of row_keys that should be used for the rows in the
-        tensor.
+        row_keys: a list or a callback.
+          If a list, it is a set of row_keys
+          that should be used for the rows in the tensor.
+          If a callback, it is called with the `tensor`'s row and index and is
+          expected to return a row_key for that row.
 
     """
     if tensor.dim() != 2:
       raise ValueError("`tensor` must have exactly two dimensions")
 
-    if len(row_keys) != tensor.shape[0]:
+    if isinstance(row_keys, List) and len(row_keys) != tensor.shape[0]:
       raise ValueError(
         "`row_keys` must have the same length as tensor.shape[0]")
 
@@ -116,15 +125,20 @@ class BigtableTable:
       if len(column_id.split(":")) != 2:
         raise ValueError(f"`columns[{i}]` must be a string in format:"
                          " \"column_family:column_name\"")
+    row_key_list = None
+    row_key_callable = None
+    if callable(row_keys):
+      row_key_callable = row_keys
+    else:
+      row_key_list = row_keys
 
     pbt_C.write_tensor(self._client, self._table_id, self._app_profile_id,
-                       tensor, columns, row_keys)
+                       tensor, columns, row_key_list, row_key_callable)
 
   def read_rows(self, cell_type: torch.dtype, columns: List[str],
                 row_set: pbt_C.RowSet,
-                versions: pbt_C.Filter = filters.latest(),
-                default_value: Union[int, float] = None) -> \
-                torch.utils.data.IterableDataset:
+                versions: pbt_C.Filter = filters.latest(), default_value: Union[
+        int, float] = None) -> torch.utils.data.IterableDataset:
     """Returns a `CloudBigtableIterableDataset` object.
 
     Args:

@@ -16,6 +16,9 @@
 # pylint: disable=C0114
 # disable class docstring for tests
 # pylint: disable=C0115
+# disable unused parameter for callback
+# pylint: disable=W0613
+import random
 import unittest
 import torch
 import os
@@ -107,3 +110,29 @@ class BigtableWriteTest(unittest.TestCase):
       results.append(tensor.reshape(1, -1))
     result = torch.cat(results)
     self.assertTrue((ten == result).all().item())
+
+  def test_write_callback(self):
+    os.environ["BIGTABLE_EMULATOR_HOST"] = self.emulator.get_addr()
+    self.emulator.create_table("fake_project", "fake_instance", "test-table",
+                               ["fam1", "fam2"])
+
+    ten = torch.Tensor(list(range(40))).reshape(20, 2)
+
+    client = BigtableClient("fake_project", "fake_instance",
+                            endpoint=self.emulator.get_addr())
+    table = client.get_table("test-table")
+
+    row_keys_list = ["row" + str(random.randint(1000, 9999)).rjust(4, "0") for _
+                     in range(20)]
+
+    def row_callback(tensor, index):
+      return row_keys_list[index]
+
+    table.write_tensor(ten, ["fam1:col1", "fam2:col2"], row_callback)
+    results = []
+    for tensor in table.read_rows(torch.float32, ["fam1:col1", "fam2:col2"],
+                                  row_set.from_rows_or_ranges(*row_keys_list)):
+      results.append(tensor.reshape(1, -1))
+    results = sorted(results, key=lambda x: x[0, 0].item())
+    result = torch.cat(results)
+    self.assertTrue((result.nan_to_num(0) == ten.nan_to_num(0)).all().item())
