@@ -15,7 +15,7 @@
 """Module implementing basic functions for obtaining BigTable Filters
 for version filtering.
 """
-import pbt_C
+from . import pbt_C
 from typing import Union
 from datetime import datetime
 
