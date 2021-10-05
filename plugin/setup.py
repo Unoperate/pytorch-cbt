@@ -1,3 +1,4 @@
+import shutil
 from subprocess import Popen, PIPE
 from setuptools import setup, Extension, find_packages
 import setuptools.command.egg_info
@@ -21,7 +22,8 @@ with open("README.md", "r", encoding="utf-8") as fh:
   long_description = fh.read()
 
 with open("version.txt", "r", encoding="utf-8") as fh:
-  version=fh.read()
+  version = fh.read()
+
 
 class BuildExtCommand(cpp_extension.BuildExtension):
   """Extension for including .so files in the wheel.
@@ -63,7 +65,8 @@ class BuildExtCommand(cpp_extension.BuildExtension):
       for lib in INCLUDE_LIBS:
         if lib in line:
           lib_loc = line.split()[2]
-          os.system(f"cp {lib_loc} {lib_dir}")
+          shutil.copyfile(lib_loc,
+                          os.path.join(lib_dir, os.path.basename(lib_loc)))
 
 
 setup(name="pytorch_bigtable", version=version, author="Google",
