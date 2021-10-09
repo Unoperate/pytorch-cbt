@@ -151,27 +151,34 @@ if __name__ == "__main__":
                       help="google cloud bigtable project id")
   parser.add_argument("-i", "--instance_id",
                       help="google cloud bigtable instance id")
-  parser.add_argument("-t", "--table_id",
-                      help="google cloud bigtable table id")
+  parser.add_argument("-t", "--table_id", help="google cloud bigtable table id")
   parser.add_argument("-f", "--family",
-                      help="column family that will be used for all the columns")
+                      help="column family that will be used for all the "
+                           "columns")
   parser.add_argument("-e", "--emulator_host",
-                      help="google cloud bigtable emulator host in format ip:port")
-  parser.add_argument("-r", "--train_set",
-                      help="path to train set CSV")
-  parser.add_argument("-s", "--test_set",
-                      help="path to test set CSV", required=True)
+                      help="google cloud bigtable emulator host in format "
+                           "ip:port")
+  parser.add_argument("-r", "--train_set", help="path to train set CSV")
+  parser.add_argument("-s", "--test_set", help="path to test set CSV",
+                      required=True)
   parser.add_argument("-c", "--draw_curves",
-                      help="Should the model evaluation draw precision-recall curves and save them?", action='store_true')
+                      help="Should the model evaluation draw precision-recall "
+                           "curves and save them?",
+                      action='store_true')
 
   args = parser.parse_args()
 
-  if args.use_bigtable and (args.project_id is None or args.instance_id is None or args.table_id is None or args.family is None):
-    parser.error("--use_bigtable requires --project_id, --instance_id --table_id and --family")
+  if args.use_bigtable and (
+      args.project_id is None or args.instance_id is None or args.table_id is
+      None or args.family is None):
+    parser.error(
+      "--use_bigtable requires --project_id, --instance_id --table_id and "
+      "--family")
 
-  
   if args.use_bigtable is None and (args.train_set is None):
-    parser.error("if not connecting to Bigtable, path to train set must be specified by setting --train_set")
+    parser.error(
+      "if not connecting to Bigtable, path to train set must be specified by "
+      "setting --train_set")
 
   if args.use_bigtable:
     print("connecting to BigTable")
@@ -183,9 +190,11 @@ if __name__ == "__main__":
 
     print("creating train set")
     train_set = train_table.read_rows(torch.float32,
-      ["cf1:" + column for column in input_features] + [
-        "cf1:" + output_feature],
-      pbt.row_set.from_rows_or_ranges(pbt.row_range.infinite()))
+                                      ["cf1:" + column for column in
+                                       input_features] + [
+                                        "cf1:" + output_feature],
+                                      pbt.row_set.from_rows_or_ranges(
+                                        pbt.row_range.infinite()))
   else:
     print("creating train set")
     train_df = pd.read_csv(args.train_set, parse_dates=['TX_DATETIME'])

@@ -136,25 +136,28 @@ def train_test_split(transactions_df: pd.DataFrame, days_train: int = 150,
 
 if __name__ == '__main__':
 
-
   parser = argparse.ArgumentParser("seed_bigtable.py")
   parser.add_argument("-p", "--project_id",
                       help="google cloud bigtable project id", required=True)
   parser.add_argument("-i", "--instance_id",
                       help="google cloud bigtable instance id", required=True)
-  parser.add_argument("-t", "--table_id",
-                      help="google cloud bigtable table id", required=True)
+  parser.add_argument("-t", "--table_id", help="google cloud bigtable table id",
+                      required=True)
   parser.add_argument("-f", "--family",
-                      help="column family that will be used for all the columns", required=True)
+                      help="column family that will be used for all the "
+                           "columns",
+                      required=True)
   parser.add_argument("-e", "--emulator_host",
-                      help="google cloud bigtable emulator host in format ip:port")
+                      help="google cloud bigtable emulator host in format "
+                           "ip:port")
   parser.add_argument("-r", "--train_set",
-                      help="path to train set CSV, required only if not using bigtable", required=True)
-  parser.add_argument("-s", "--test_set",
-                      help="path to test set CSV", required=True)
+                      help="path to train set CSV, required only if not using "
+                           "bigtable",
+                      required=True)
+  parser.add_argument("-s", "--test_set", help="path to test set CSV",
+                      required=True)
 
   args = parser.parse_args()
-
 
   if not os.path.exists("simulated-data-transformed"):
     os.system(
@@ -176,7 +179,7 @@ if __name__ == '__main__':
   print("saving test data locally")
   test_df.to_csv(args.test_set, index=False)
 
-  print("Seed bigtable") 
+  print("Seed bigtable")
   if args.emulator_host:
     os.environ["BIGTABLE_EMULATOR_HOST"] = args.emulator_host
 
@@ -197,7 +200,7 @@ if __name__ == '__main__':
     batch_X = X_train[idx:idx + BATCH_SIZE]
     batch_y = y_train[idx:idx + BATCH_SIZE]
     row_keys = row_keys_all[idx:idx + BATCH_SIZE]
-    train_table.write_tensor(batch_X,
-                             [args.family + ":" + column for column in input_features],
+    train_table.write_tensor(batch_X, [args.family + ":" + column for column in
+                                       input_features], row_keys)
+    train_table.write_tensor(batch_y, [args.family + ":" + output_feature],
                              row_keys)
-    train_table.write_tensor(batch_y, [args.family + ":" + output_feature], row_keys)
