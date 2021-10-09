@@ -115,7 +115,7 @@ def train_model(model, loader, optimizer, loss_fn, epochs=20):
                f"{total_prec / batch_counter :.4f}")
 
 
-def eval_model(model, loader, output="precision_recall.png"):
+def eval_model(model, loader, output=None):
   model.eval()
   with torch.no_grad():
     y_all = None
@@ -131,13 +131,14 @@ def eval_model(model, loader, output="precision_recall.png"):
         y_pred_all = torch.cat((y_pred_all, y_pred), 0)
 
     print(f"average precision: {average_precision_score(y, y_pred)}")
-    precision, recall, thresholds = precision_recall_curve(y_all, y_pred_all)
-    plt.figure()
-    plt.step(recall, precision, alpha=0.3, color='b')
-    plt.fill_between(recall, precision, alpha=0.3, color='b')
-    plt.xlabel('Recall')
-    plt.ylabel('Precision')
-    plt.savefig(output, dpi=300, format='png')
+    if output and len(output) > 0:
+      precision, recall, thresholds = precision_recall_curve(y_all, y_pred_all)
+      plt.figure()
+      plt.step(recall, precision, alpha=0.3, color='b')
+      plt.fill_between(recall, precision, alpha=0.3, color='b')
+      plt.xlabel('Recall')
+      plt.ylabel('Precision')
+      plt.savefig(output, dpi=300, format='png')
 
 
 if __name__ == "__main__":
@@ -146,15 +147,39 @@ if __name__ == "__main__":
   parser.add_argument("-b", "--use_bigtable",
                       help="specifies if training data is taken from bigtable "
                            "database.", action='store_true')
+  parser.add_argument("-p", "--project_id",
+                      help="google cloud bigtable project id")
+  parser.add_argument("-i", "--instance_id",
+                      help="google cloud bigtable instance id")
+  parser.add_argument("-t", "--table_id",
+                      help="google cloud bigtable table id")
+  parser.add_argument("-f", "--family",
+                      help="column family that will be used for all the columns")
+  parser.add_argument("-e", "--emulator_host",
+                      help="google cloud bigtable emulator host in format ip:port")
+  parser.add_argument("-r", "--train_set",
+                      help="path to train set CSV")
+  parser.add_argument("-s", "--test_set",
+                      help="path to test set CSV", required=True)
+  parser.add_argument("-c", "--draw_curves",
+                      help="Should the model evaluation draw precision-recall curves and save them?", action='store_true')
+
   args = parser.parse_args()
+
+  if args.use_bigtable and (args.project_id is None or args.instance_id is None or args.table_id is None or args.family is None):
+    parser.error("--use_bigtable requires --project_id, --instance_id --table_id and --family")
+
+  
+  if args.use_bigtable is None and (args.train_set is None):
+    parser.error("if not connecting to Bigtable, path to train set must be specified by setting --train_set")
 
   if args.use_bigtable:
     print("connecting to BigTable")
-    os.environ["BIGTABLE_EMULATOR_HOST"] = "127.0.0.1:8086"
-    client = pbt.BigtableClient("unoperate-test", "127.0.0.1:8086",
-                                endpoint="")
+    if args.emulator_host:
+      os.environ["BIGTABLE_EMULATOR_HOST"] = args.emulator_host
+    client = pbt.BigtableClient(args.project_id, args.instance_id)
 
-    train_table = client.get_table("train")
+    train_table = client.get_table(args.table_id)
 
     print("creating train set")
     train_set = train_table.read_rows(torch.float32,
@@ -163,11 +188,11 @@ if __name__ == "__main__":
       pbt.row_set.from_rows_or_ranges(pbt.row_range.infinite()))
   else:
     print("creating train set")
-    train_df = pd.read_csv("train_df.csv", parse_dates=['TX_DATETIME'])
+    train_df = pd.read_csv(args.train_set, parse_dates=['TX_DATETIME'])
     train_set = FraudDataset(train_df)
 
   print("creating test set")
-  test_df = pd.read_csv("test_df.csv", parse_dates=['TX_DATETIME'])
+  test_df = pd.read_csv(args.test_set, parse_dates=['TX_DATETIME'])
   test_set = FraudDataset(test_df)
 
   print("creating a model")
@@ -182,14 +207,13 @@ if __name__ == "__main__":
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
 
   print("initial testing")
-  eval_model(model=model, loader=test_loader, output="before.png")
+  before_curve = "before.png" if args.draw_curves else ""
+  eval_model(model=model, loader=test_loader, output=before_curve)
 
   print("training")
   train_model(model=model, loader=train_loader, optimizer=optimizer,
               loss_fn=torch.nn.BCELoss(), epochs=20)
 
-  torch.save(model.state_dict(), "model.backup")
-  # model.load_state_dict(torch.load("model.backup"))
-
   print("testing after training")
-  eval_model(model=model, loader=test_loader, output="after.png")
+  after_curve = "after.png" if args.draw_curves else ""
+  eval_model(model=model, loader=test_loader, output=after_curve)

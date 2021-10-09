@@ -41,6 +41,7 @@ import pandas as pd
 from typing import Union
 import pytorch_bigtable as pbt
 import torch
+import argparse
 from tqdm import tqdm
 
 output_feature = "TX_FRAUD"
@@ -134,6 +135,27 @@ def train_test_split(transactions_df: pd.DataFrame, days_train: int = 150,
 
 
 if __name__ == '__main__':
+
+
+  parser = argparse.ArgumentParser("seed_bigtable.py")
+  parser.add_argument("-p", "--project_id",
+                      help="google cloud bigtable project id", required=True)
+  parser.add_argument("-i", "--instance_id",
+                      help="google cloud bigtable instance id", required=True)
+  parser.add_argument("-t", "--table_id",
+                      help="google cloud bigtable table id", required=True)
+  parser.add_argument("-f", "--family",
+                      help="column family that will be used for all the columns", required=True)
+  parser.add_argument("-e", "--emulator_host",
+                      help="google cloud bigtable emulator host in format ip:port")
+  parser.add_argument("-r", "--train_set",
+                      help="path to train set CSV, required only if not using bigtable", required=True)
+  parser.add_argument("-s", "--test_set",
+                      help="path to test set CSV", required=True)
+
+  args = parser.parse_args()
+
+
   if not os.path.exists("simulated-data-transformed"):
     os.system(
       "git clone https://github.com/Fraud-Detection-Handbook/simulated-data"
@@ -149,15 +171,17 @@ if __name__ == '__main__':
         "fraudulent transactions")
 
   print("saving train data locally")
-  train_df.to_csv('train_df.csv', index=False)
+  train_df.to_csv(args.train_set, index=False)
 
   print("saving test data locally")
-  test_df.to_csv('test_df.csv', index=False)
+  test_df.to_csv(args.test_set, index=False)
 
-  print("Seed bigtable")
-  os.environ["BIGTABLE_EMULATOR_HOST"] = "127.0.0.1:8086"
-  client = pbt.BigtableClient("unoperate-test", "127.0.0.1:8086", endpoint="")
-  train_table = client.get_table("train")
+  print("Seed bigtable") 
+  if args.emulator_host:
+    os.environ["BIGTABLE_EMULATOR_HOST"] = args.emulator_host
+
+  client = pbt.BigtableClient(args.project_id, args.instance_id)
+  train_table = client.get_table(args.table_id)
 
   BATCH_SIZE = 1000
 
@@ -174,6 +198,6 @@ if __name__ == '__main__':
     batch_y = y_train[idx:idx + BATCH_SIZE]
     row_keys = row_keys_all[idx:idx + BATCH_SIZE]
     train_table.write_tensor(batch_X,
-                             ["cf1:" + column for column in input_features],
+                             [args.family + ":" + column for column in input_features],
                              row_keys)
-    train_table.write_tensor(batch_y, ["cf1:" + output_feature], row_keys)
+    train_table.write_tensor(batch_y, [args.family + ":" + output_feature], row_keys)
