@@ -206,18 +206,38 @@ def parse_arguments():
   parser.add_argument("-f", "--family",
                       help="column family that will be used for all the "
                            "columns")
-  parser.add_argument("-e", "--emulator_host",
-                      help="google cloud bigtable emulator host in format "
-                           "ip:port")
-  parser.add_argument("-r", "--train_set", help="path to train set CSV")
-  parser.add_argument("-s", "--test_set", help="path to test set CSV",
-                      required=True)
+  parser.add_argument("-e", "--emulator_addr",
+                      help="google cloud bigtable emulator address in format "
+                           "ip:port. If you specify this option the emulator "
+                           "will be used.")
+  parser.add_argument("-r", "--train_set", help="path to train set CSV, as "
+                      "produced by the seed_bigtable.py script")
+  parser.add_argument("-s", "--test_set", help="path to test set CSV, as "
+                      "produced by the seed_bigtable.py script", required=True)
   parser.add_argument("-c", "--draw_curves",
                       help="Should the model evaluation draw precision-recall "
                            "curves and save them?",
                       action='store_true')
 
   args = parser.parse_args()
+
+  if args.train_set:
+    try:
+      with open(args.train_set, "r", encoding="UTF-8"):
+        pass
+    except:
+      parser.error(
+      "error opening file " + args.train_set +
+      "\n\t--train_set must be a valid path")
+
+  if args.test_set:
+    try:
+      with open(args.test_set, "r", encoding="UTF-8"):
+        pass
+    except:
+      parser.error(
+      "error opening file " + args.test_set +
+      "\n\t--test_set must be a valid path")
 
   if args.use_bigtable and (
       args.project_id is None or args.instance_id is None or args.table_id is
