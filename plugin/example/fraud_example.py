@@ -44,9 +44,9 @@ import pytorch_bigtable.row_set
 import pytorch_bigtable.row_range
 import pandas as pd
 
-output_feature = "TX_FRAUD"
+OUTPUT_FEATURE = "TX_FRAUD"
 
-input_features = ['TX_AMOUNT', 'TX_DURING_WEEKEND', 'TX_DURING_NIGHT',
+INPUT_FEATURES = ['TX_AMOUNT', 'TX_DURING_WEEKEND', 'TX_DURING_NIGHT',
                   'CUSTOMER_ID_NB_TX_1DAY_WINDOW',
                   'CUSTOMER_ID_AVG_AMOUNT_1DAY_WINDOW',
                   'CUSTOMER_ID_NB_TX_7DAY_WINDOW',
@@ -61,11 +61,11 @@ input_features = ['TX_AMOUNT', 'TX_DURING_WEEKEND', 'TX_DURING_NIGHT',
                   'TERMINAL_ID_RISK_30DAY_WINDOW']
 
 
-class FraudDataset(torch.utils.data.Dataset):
+class InMemFraudDataset(torch.utils.data.Dataset):
   def __init__(self, transactions_df):
-    self.X = torch.tensor(transactions_df[input_features].values,
+    self.X = torch.tensor(transactions_df[INPUT_FEATURES].values,
                           dtype=torch.float32)
-    self.y = torch.tensor(transactions_df[output_feature].values,
+    self.y = torch.tensor(transactions_df[OUTPUT_FEATURE].values,
                           dtype=torch.float32)
 
   def __len__(self):
@@ -82,7 +82,7 @@ def init_weights(layer):
 
 
 def create_model():
-  layer_size = len(input_features)
+  layer_size = len(INPUT_FEATURES)
   model = torch.nn.Sequential(torch.nn.Linear(layer_size, layer_size),
                               torch.nn.ReLU(),
                               torch.nn.Linear(layer_size, layer_size),
@@ -98,7 +98,9 @@ def train_model(model, loader, optimizer, loss_fn, epochs=20):
     total_prec = 0
     batch_counter = 0
     for batch in loader:
-      if isinstance(loader.dataset, FraudDataset):
+      # if the data comes from Bigtable, it is in form of one vector,
+      # not a tuple (features, label) so we need to split it ourselves.
+      if isinstance(loader.dataset, InMemFraudDataset):
         X, y = batch
       else:
         X, y = batch[:, :-1], batch[:, -1]
@@ -115,7 +117,7 @@ def train_model(model, loader, optimizer, loss_fn, epochs=20):
                f"{total_prec / batch_counter :.4f}")
 
 
-def eval_model(model, loader, output=None):
+def eval_model(model, loader, curve_plot_path=None):
   model.eval()
   with torch.no_grad():
     y_all = None
@@ -131,18 +133,67 @@ def eval_model(model, loader, output=None):
         y_pred_all = torch.cat((y_pred_all, y_pred), 0)
 
     print(f"average precision: {average_precision_score(y, y_pred)}")
-    if output and len(output) > 0:
+    if curve_plot_path:
       precision, recall, thresholds = precision_recall_curve(y_all, y_pred_all)
       plt.figure()
       plt.step(recall, precision, alpha=0.3, color='b')
       plt.fill_between(recall, precision, alpha=0.3, color='b')
       plt.xlabel('Recall')
       plt.ylabel('Precision')
-      plt.savefig(output, dpi=300, format='png')
+      plt.savefig(curve_plot_path, dpi=300, format='png')
 
 
-if __name__ == "__main__":
+def main(args):
 
+  if args.use_bigtable:
+    print("connecting to BigTable")
+    if args.emulator_host:
+      os.environ["BIGTABLE_EMULATOR_HOST"] = args.emulator_host
+    client = pbt.BigtableClient(args.project_id, args.instance_id)
+
+    train_table = client.get_table(args.table_id)
+
+    print("creating train set")
+    train_set = train_table.read_rows(torch.float32,
+                                      ["cf1:" + column for column in
+                                       INPUT_FEATURES] + [
+                                        "cf1:" + OUTPUT_FEATURE],
+                                      pbt.row_set.from_rows_or_ranges(
+                                        pbt.row_range.infinite()))
+  else:
+    print("creating train set")
+    train_df = pd.read_csv(args.train_set, parse_dates=['TX_DATETIME'])
+    train_set = InMemFraudDataset(train_df)
+
+  print("creating test set")
+  test_df = pd.read_csv(args.test_set, parse_dates=['TX_DATETIME'])
+  test_set = InMemFraudDataset(test_df)
+
+  print("creating a model")
+  model = create_model()
+  learning_rate = 2e-3
+  batch_size = 10000
+
+  train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
+                                             num_workers=5)
+  optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+  test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
+
+  print("initial testing")
+  before_curve = "before.png" if args.draw_curves else None
+  eval_model(model=model, loader=test_loader, curve_plot_path=before_curve)
+
+  print("training")
+  train_model(model=model, loader=train_loader, optimizer=optimizer,
+              loss_fn=torch.nn.BCELoss(), epochs=20)
+
+  print("testing after training")
+  after_curve = "after.png" if args.draw_curves else None
+  eval_model(model=model, loader=test_loader, curve_plot_path=after_curve)
+
+
+def parse_arguments():
   parser = argparse.ArgumentParser("fraud_example.py")
   parser.add_argument("-b", "--use_bigtable",
                       help="specifies if training data is taken from bigtable "
@@ -180,49 +231,10 @@ if __name__ == "__main__":
       "if not connecting to Bigtable, path to train set must be specified by "
       "setting --train_set")
 
-  if args.use_bigtable:
-    print("connecting to BigTable")
-    if args.emulator_host:
-      os.environ["BIGTABLE_EMULATOR_HOST"] = args.emulator_host
-    client = pbt.BigtableClient(args.project_id, args.instance_id)
+  return args
 
-    train_table = client.get_table(args.table_id)
+if __name__ == "__main__":
 
-    print("creating train set")
-    train_set = train_table.read_rows(torch.float32,
-                                      ["cf1:" + column for column in
-                                       input_features] + [
-                                        "cf1:" + output_feature],
-                                      pbt.row_set.from_rows_or_ranges(
-                                        pbt.row_range.infinite()))
-  else:
-    print("creating train set")
-    train_df = pd.read_csv(args.train_set, parse_dates=['TX_DATETIME'])
-    train_set = FraudDataset(train_df)
+  args = parse_arguments()
 
-  print("creating test set")
-  test_df = pd.read_csv(args.test_set, parse_dates=['TX_DATETIME'])
-  test_set = FraudDataset(test_df)
-
-  print("creating a model")
-  model = create_model()
-  learning_rate = 2e-3
-  batch_size = 10000
-
-  train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
-                                             num_workers=5)
-  optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
-  test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
-
-  print("initial testing")
-  before_curve = "before.png" if args.draw_curves else ""
-  eval_model(model=model, loader=test_loader, output=before_curve)
-
-  print("training")
-  train_model(model=model, loader=train_loader, optimizer=optimizer,
-              loss_fn=torch.nn.BCELoss(), epochs=20)
-
-  print("testing after training")
-  after_curve = "after.png" if args.draw_curves else ""
-  eval_model(model=model, loader=test_loader, output=after_curve)
+  main(args)
