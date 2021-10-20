@@ -37,8 +37,7 @@ import argparse
 
 import torch.utils.data
 from tqdm import tqdm
-from sklearn.metrics import average_precision_score, precision_recall_curve
-from matplotlib import pyplot as plt
+from sklearn.metrics import average_precision_score
 import pytorch_bigtable as pbt
 import pytorch_bigtable.row_set
 import pytorch_bigtable.row_range
@@ -59,21 +58,6 @@ INPUT_FEATURES = ['TX_AMOUNT', 'TX_DURING_WEEKEND', 'TX_DURING_NIGHT',
                   'TERMINAL_ID_RISK_7DAY_WINDOW',
                   'TERMINAL_ID_NB_TX_30DAY_WINDOW',
                   'TERMINAL_ID_RISK_30DAY_WINDOW']
-
-
-class InMemFraudDataset(torch.utils.data.Dataset):
-  def __init__(self, transactions_df):
-    self.X = torch.tensor(transactions_df[INPUT_FEATURES].values,
-                          dtype=torch.float32)
-    self.y = torch.tensor(transactions_df[OUTPUT_FEATURE].values,
-                          dtype=torch.float32)
-
-  def __len__(self):
-    return len(self.X)
-
-  def __getitem__(self, item):
-    return (self.X[item], self.y[item])
-
 
 def init_weights(layer):
   if isinstance(layer, torch.nn.Linear):
@@ -98,12 +82,7 @@ def train_model(model, loader, optimizer, loss_fn, epochs=20):
     total_prec = 0
     batch_counter = 0
     for batch in loader:
-      # if the data comes from Bigtable, it is in form of one vector,
-      # not a tuple (features, label) so we need to split it ourselves.
-      if isinstance(loader.dataset, InMemFraudDataset):
-        X, y = batch
-      else:
-        X, y = batch[:, :-1], batch[:, -1]
+      X, y = batch[:, :-1], batch[:, -1]
       y_pred = model(X)
       loss = loss_fn(y_pred.reshape(-1), y)
       total_loss += loss.item()
@@ -117,13 +96,13 @@ def train_model(model, loader, optimizer, loss_fn, epochs=20):
                f"{total_prec / batch_counter :.4f}")
 
 
-def eval_model(model, loader, curve_plot_path=None):
+def eval_model(model, loader):
   model.eval()
   with torch.no_grad():
     y_all = None
     y_pred_all = None
     for batch in loader:
-      X, y = batch
+      X, y = batch[:, :-1], batch[:, -1]
       y_pred = model(X)
       if y_all is None:
         y_all = y
@@ -133,41 +112,34 @@ def eval_model(model, loader, curve_plot_path=None):
         y_pred_all = torch.cat((y_pred_all, y_pred), 0)
 
     print(f"average precision: {average_precision_score(y, y_pred)}")
-    if curve_plot_path:
-      precision, recall, thresholds = precision_recall_curve(y_all, y_pred_all)
-      plt.figure()
-      plt.step(recall, precision, alpha=0.3, color='b')
-      plt.fill_between(recall, precision, alpha=0.3, color='b')
-      plt.xlabel('Recall')
-      plt.ylabel('Precision')
-      plt.savefig(curve_plot_path, dpi=300, format='png')
 
 
 def main(args):
 
-  if args.use_bigtable:
-    print("connecting to BigTable")
-    if args.emulator_host:
-      os.environ["BIGTABLE_EMULATOR_HOST"] = args.emulator_host
-    client = pbt.BigtableClient(args.project_id, args.instance_id)
+  print("connecting to BigTable")
+  if args.emulator_addr:
+    os.environ["BIGTABLE_EMULATOR_HOST"] = args.emulator_addr
+  client = pbt.BigtableClient(args.project_id, args.instance_id)
 
-    train_table = client.get_table(args.table_id)
+  train_table = client.get_table(args.train_set_table)
+  test_table = client.get_table(args.test_set_table)
 
-    print("creating train set")
-    train_set = train_table.read_rows(torch.float32,
-                                      ["cf1:" + column for column in
-                                       INPUT_FEATURES] + [
-                                        "cf1:" + OUTPUT_FEATURE],
-                                      pbt.row_set.from_rows_or_ranges(
-                                        pbt.row_range.infinite()))
-  else:
-    print("creating train set")
-    train_df = pd.read_csv(args.train_set, parse_dates=['TX_DATETIME'])
-    train_set = InMemFraudDataset(train_df)
+  print("creating train set")
+  train_set = train_table.read_rows(torch.float32,
+                                    ["cf1:" + column for column in
+                                      INPUT_FEATURES] + [
+                                      "cf1:" + OUTPUT_FEATURE],
+                                    pbt.row_set.from_rows_or_ranges(
+                                      pbt.row_range.infinite()))
+  
+  test_set = test_table.read_rows(torch.float32,
+                                    ["cf1:" + column for column in
+                                      INPUT_FEATURES] + [
+                                      "cf1:" + OUTPUT_FEATURE],
+                                    pbt.row_set.from_rows_or_ranges(
+                                      pbt.row_range.infinite()))
+  
 
-  print("creating test set")
-  test_df = pd.read_csv(args.test_set, parse_dates=['TX_DATETIME'])
-  test_set = InMemFraudDataset(test_df)
 
   print("creating a model")
   model = create_model()
@@ -181,77 +153,35 @@ def main(args):
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
 
   print("initial testing")
-  before_curve = "before.png" if args.draw_curves else None
-  eval_model(model=model, loader=test_loader, curve_plot_path=before_curve)
+  eval_model(model=model, loader=test_loader)
 
   print("training")
   train_model(model=model, loader=train_loader, optimizer=optimizer,
               loss_fn=torch.nn.BCELoss(), epochs=20)
 
   print("testing after training")
-  after_curve = "after.png" if args.draw_curves else None
-  eval_model(model=model, loader=test_loader, curve_plot_path=after_curve)
+  eval_model(model=model, loader=test_loader)
 
 
 def parse_arguments():
-  parser = argparse.ArgumentParser("fraud_example.py")
-  parser.add_argument("-b", "--use_bigtable",
-                      help="specifies if training data is taken from bigtable "
-                           "database.", action='store_true')
+  parser = argparse.ArgumentParser("seed_bigtable.py")
   parser.add_argument("-p", "--project_id",
-                      help="google cloud bigtable project id")
+                      help="google cloud bigtable project id", required=True)
   parser.add_argument("-i", "--instance_id",
-                      help="google cloud bigtable instance id")
-  parser.add_argument("-t", "--table_id", help="google cloud bigtable table id")
+                      help="google cloud bigtable instance id", required=True)
+  parser.add_argument("--train_set_table", help="google cloud bigtable table storing train_set",
+                      required=True)
+  parser.add_argument("--test_set_table", help="google cloud bigtable table storing test_set",
+                      required=True)
   parser.add_argument("-f", "--family",
                       help="column family that will be used for all the "
-                           "columns")
+                           "columns",
+                      required=True)
   parser.add_argument("-e", "--emulator_addr",
                       help="google cloud bigtable emulator address in format "
-                           "ip:port. If you specify this option the emulator "
-                           "will be used.")
-  parser.add_argument("-r", "--train_set", help="path to train set CSV, as "
-                      "produced by the seed_bigtable.py script")
-  parser.add_argument("-s", "--test_set", help="path to test set CSV, as "
-                      "produced by the seed_bigtable.py script", required=True)
-  parser.add_argument("-c", "--draw_curves",
-                      help="Should the model evaluation draw precision-recall "
-                           "curves and save them?",
-                      action='store_true')
+                           "ip:port")
 
-  args = parser.parse_args()
-
-  if args.train_set:
-    try:
-      with open(args.train_set, "r", encoding="UTF-8"):
-        pass
-    except:
-      parser.error(
-      "error opening file " + args.train_set +
-      "\n\t--train_set must be a valid path")
-
-  if args.test_set:
-    try:
-      with open(args.test_set, "r", encoding="UTF-8"):
-        pass
-    except:
-      parser.error(
-      "error opening file " + args.test_set +
-      "\n\t--test_set must be a valid path")
-
-  if args.use_bigtable and (
-      args.project_id is None or args.instance_id is None or args.table_id is
-      None or args.family is None):
-    parser.error(
-      "--use_bigtable requires --project_id, --instance_id --table_id and "
-      "--family")
-
-  if args.use_bigtable is None and (args.train_set is None):
-    parser.error(
-      "if not connecting to Bigtable, path to train set must be specified by "
-      "setting --train_set")
-
-  return args
+  return parser.parse_args()
 
 if __name__ == "__main__":
 

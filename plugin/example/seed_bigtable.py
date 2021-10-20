@@ -44,9 +44,9 @@ import torch
 import argparse
 from tqdm import tqdm
 
-output_feature = "TX_FRAUD"
+OUTPUT_FEATURE = "TX_FRAUD"
 
-input_features = ['TX_AMOUNT', 'TX_DURING_WEEKEND', 'TX_DURING_NIGHT',
+INPUT_FEATURES = ['TX_AMOUNT', 'TX_DURING_WEEKEND', 'TX_DURING_NIGHT',
                   'CUSTOMER_ID_NB_TX_1DAY_WINDOW',
                   'CUSTOMER_ID_AVG_AMOUNT_1DAY_WINDOW',
                   'CUSTOMER_ID_NB_TX_7DAY_WINDOW',
@@ -61,7 +61,7 @@ input_features = ['TX_AMOUNT', 'TX_DURING_WEEKEND', 'TX_DURING_NIGHT',
                   'TERMINAL_ID_RISK_30DAY_WINDOW']
 
 
-def read_data(start: [str, datetime] = "2018-04-01",
+def read_data(start: Union[str, datetime] = "2018-04-01",
               end: Union[str, datetime] = "2018-10-01"):
   """Function for reading transactions dataset taken from
   https://github.com/Fraud-Detection-Handbook/simulated-data
@@ -134,31 +134,28 @@ def train_test_split(transactions_df: pd.DataFrame, days_train: int = 150,
   return train_df, test_df
 
 
-if __name__ == '__main__':
-
+def parse_arguments():
   parser = argparse.ArgumentParser("seed_bigtable.py")
   parser.add_argument("-p", "--project_id",
                       help="google cloud bigtable project id", required=True)
   parser.add_argument("-i", "--instance_id",
                       help="google cloud bigtable instance id", required=True)
-  parser.add_argument("-t", "--table_id", help="google cloud bigtable table id",
+  parser.add_argument("--train_set_table", help="google cloud bigtable table storing train_set",
+                      required=True)
+  parser.add_argument("--test_set_table", help="google cloud bigtable table storing test_set",
                       required=True)
   parser.add_argument("-f", "--family",
                       help="column family that will be used for all the "
                            "columns",
                       required=True)
-  parser.add_argument("-e", "--emulator_host",
-                      help="google cloud bigtable emulator host in format "
+  parser.add_argument("-e", "--emulator_addr",
+                      help="google cloud bigtable emulator address in format "
                            "ip:port")
-  parser.add_argument("-r", "--train_set",
-                      help="path to train set CSV, required only if not using "
-                           "bigtable",
-                      required=True)
-  parser.add_argument("-s", "--test_set", help="path to test set CSV",
-                      required=True)
 
-  args = parser.parse_args()
+  return parser.parse_args()
 
+
+def main(args):
   if not os.path.exists("simulated-data-transformed"):
     os.system(
       "git clone https://github.com/Fraud-Detection-Handbook/simulated-data"
@@ -173,34 +170,53 @@ if __name__ == '__main__':
   print("test set", test_df.shape, "containing", test_df['TX_FRAUD'].sum(),
         "fraudulent transactions")
 
-  print("saving train data locally")
-  train_df.to_csv(args.train_set, index=False)
-
-  print("saving test data locally")
-  test_df.to_csv(args.test_set, index=False)
-
   print("Seed bigtable")
-  if args.emulator_host:
-    os.environ["BIGTABLE_EMULATOR_HOST"] = args.emulator_host
+  if args.emulator_addr:
+    os.environ["BIGTABLE_EMULATOR_HOST"] = args.emulator_addr
 
   client = pbt.BigtableClient(args.project_id, args.instance_id)
-  train_table = client.get_table(args.table_id)
+  train_table = client.get_table(args.train_set_table)
+  test_table = client.get_table(args.test_set_table)
 
   BATCH_SIZE = 1000
 
-  X_train = torch.tensor(train_df[input_features].values, dtype=torch.float32)
-  y_train = torch.tensor(train_df[[output_feature]].values, dtype=torch.float32)
+  X_train = torch.tensor(train_df[INPUT_FEATURES].values, dtype=torch.float32)
+  y_train = torch.tensor(train_df[[OUTPUT_FEATURE]].values, dtype=torch.float32)
 
-  row_keys_all = ["r" + str(j).rjust(10, '0') for j in range(X_train.shape[0])]
-  random.shuffle(row_keys_all)
+  row_keys_train = ["r" + str(j).rjust(10, '0') for j in range(X_train.shape[0])]
+  random.shuffle(row_keys_train)
 
+  print("send train_set data")
   for i, idx in enumerate(
       tqdm(range(0, X_train.shape[0], BATCH_SIZE), ascii=True,
            desc="seeding BigTable")):
     batch_X = X_train[idx:idx + BATCH_SIZE]
     batch_y = y_train[idx:idx + BATCH_SIZE]
-    row_keys = row_keys_all[idx:idx + BATCH_SIZE]
+    row_keys = row_keys_train[idx:idx + BATCH_SIZE]
     train_table.write_tensor(batch_X, [args.family + ":" + column for column in
-                                       input_features], row_keys)
-    train_table.write_tensor(batch_y, [args.family + ":" + output_feature],
+                                       INPUT_FEATURES], row_keys)
+    train_table.write_tensor(batch_y, [args.family + ":" + OUTPUT_FEATURE],
                              row_keys)
+
+  X_test = torch.tensor(test_df[INPUT_FEATURES].values, dtype=torch.float32)
+  y_test = torch.tensor(test_df[[OUTPUT_FEATURE]].values, dtype=torch.float32)
+
+  row_keys_test = ["r" + str(j).rjust(10, '0') for j in range(X_test.shape[0])]
+  random.shuffle(row_keys_test)
+
+  print("send test_set data")
+  for i, idx in enumerate(
+      tqdm(range(0, X_test.shape[0], BATCH_SIZE), ascii=True,
+           desc="seeding BigTable")):
+    batch_X = X_test[idx:idx + BATCH_SIZE]
+    batch_y = y_test[idx:idx + BATCH_SIZE]
+    row_keys = row_keys_test[idx:idx + BATCH_SIZE]
+    test_table.write_tensor(batch_X, [args.family + ":" + column for column in
+                                       INPUT_FEATURES], row_keys)
+    test_table.write_tensor(batch_y, [args.family + ":" + OUTPUT_FEATURE],
+                             row_keys)
+
+
+if __name__ == '__main__':
+  args = parse_arguments()
+  main(args)  
