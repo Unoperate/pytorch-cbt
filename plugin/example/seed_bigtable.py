@@ -66,6 +66,18 @@ INPUT_FEATURES = ['TX_AMOUNT', 'TX_DURING_WEEKEND', 'TX_DURING_NIGHT',
                   'TERMINAL_ID_RISK_30DAY_WINDOW']
 
 
+def ensure_datetime(value: Union[str, datetime]):
+  """Makes sure that the value is in the right format and return a datetime
+  object. Raises TypeError if format is wrong."""
+  if isinstance(value, datetime):
+    return value
+  try:
+    parsed_date = datetime.strptime(value, "%Y-%m-%d")
+  except:
+    raise TypeError(f"{value} must be in format %Y-%m-%d")
+  return parsed_date
+
+
 def read_data(path_to_repository: str,
               start: Union[str, datetime] = "2018-04-01",
               end: Union[str, datetime] = "2018-10-01"):
@@ -79,17 +91,12 @@ def read_data(path_to_repository: str,
     pre-generated dataset.
     end (str|datetime): end of range (exclusive), type same as `start`.
   """
-  data_dir = os.path.join(path_to_repository, 'simulated-data-transformed-6e3ca5849b4681430388056d3f1dcfb41d4e8269','data')
+  data_dir = os.path.join(path_to_repository,
+                          'simulated-data-transformed-6e3ca5849b4681430388056d3f1dcfb41d4e8269',
+                          'data')
 
-  if isinstance(start, datetime):
-    start_date = start
-  else:
-    start_date = datetime.strptime(start, "%Y-%m-%d")
-
-  if isinstance(end, datetime):
-    end_date = end
-  else:
-    end_date = datetime.strptime(end, "%Y-%m-%d")
+  start_date = ensure_datetime(start)
+  end_date = ensure_datetime(end)
 
   all_dfs = []
   for f in os.listdir(data_dir):
@@ -141,19 +148,25 @@ def train_test_split(transactions_df: pd.DataFrame, days_train: int = 150,
 
 
 def parse_arguments():
-  parser = argparse.ArgumentParser("seed_bigtable.py")
+  parser = argparse.ArgumentParser("seed_bigtable.py",
+                                   description="Script uploading fraud "
+                                               "detection dataset to "
+                                               "bigtable. For more "
+                                               "information please visit: "
+                                               "https://github.com/Unoperate/pytorch-cbt")
   parser.add_argument("-p", "--project_id",
                       help="google cloud bigtable project id", required=True)
   parser.add_argument("-i", "--instance_id",
                       help="google cloud bigtable instance id", required=True)
-  parser.add_argument("--train_set_table", help="google cloud bigtable table storing train_set",
+  parser.add_argument("--train_set_table",
+                      help="google cloud bigtable table storing train_set",
                       required=True)
-  parser.add_argument("--test_set_table", help="google cloud bigtable table storing test_set",
+  parser.add_argument("--test_set_table",
+                      help="google cloud bigtable table storing test_set",
                       required=True)
   parser.add_argument("-f", "--family",
                       help="column family that will be used for all the "
-                           "columns",
-                      required=True)
+                           "columns", required=True)
   parser.add_argument("-e", "--emulator_addr",
                       help="google cloud bigtable emulator address in format "
                            "ip:port")
@@ -163,16 +176,22 @@ def parse_arguments():
 
 def main(args):
   global_temp_dir = tempfile.gettempdir()
-  temp_dirs = glob.glob(os.path.join(tempfile.gettempdir(), '*-simulated-data-transformed'))
+  temp_dirs = glob.glob(
+    os.path.join(tempfile.gettempdir(), '*-simulated-data-transformed'))
   if len(temp_dirs) == 0:
     temp_dir = tempfile.mkdtemp(suffix="-simulated-data-transformed")
     print("downloading simulated-data-transformed to:", temp_dir)
-    response = requests.get("https://github.com/Fraud-Detection-Handbook/simulated-data-transformed/archive/6e3ca58.zip")
+    response = requests.get(
+      "https://github.com/Fraud-Detection-Handbook/simulated-data-transformed"
+      "/archive/6e3ca58.zip")
     with zipfile.ZipFile(io.BytesIO(response.content)) as simulated_data_zip:
       simulated_data_zip.extractall(temp_dir)
   elif len(temp_dirs) > 1:
     temp_dir = temp_dirs[0]
-    print("found more than one repositories with simulated-data-transformed, using:", temp_dir)
+    print(
+      "found more than one repositories with simulated-data-transformed, "
+      "using:",
+      temp_dir)
   else:
     temp_dir = temp_dirs[0]
     print("found simulated-data-transformed in:", temp_dir)
@@ -199,7 +218,8 @@ def main(args):
   X_train = torch.tensor(train_df[INPUT_FEATURES].values, dtype=torch.float32)
   y_train = torch.tensor(train_df[[OUTPUT_FEATURE]].values, dtype=torch.float32)
 
-  row_keys_train = ["r" + str(j).rjust(10, '0') for j in range(X_train.shape[0])]
+  row_keys_train = ["r" + str(j).rjust(10, '0') for j in
+                    range(X_train.shape[0])]
   random.shuffle(row_keys_train)
 
   print("send train_set data")
@@ -228,11 +248,11 @@ def main(args):
     batch_y = y_test[idx:idx + BATCH_SIZE]
     row_keys = row_keys_test[idx:idx + BATCH_SIZE]
     test_table.write_tensor(batch_X, [args.family + ":" + column for column in
-                                       INPUT_FEATURES], row_keys)
+                                      INPUT_FEATURES], row_keys)
     test_table.write_tensor(batch_y, [args.family + ":" + OUTPUT_FEATURE],
-                             row_keys)
+                            row_keys)
 
 
 if __name__ == '__main__':
   args = parse_arguments()
-  main(args)  
+  main(args)

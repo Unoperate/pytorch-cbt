@@ -59,6 +59,7 @@ INPUT_FEATURES = ['TX_AMOUNT', 'TX_DURING_WEEKEND', 'TX_DURING_NIGHT',
                   'TERMINAL_ID_NB_TX_30DAY_WINDOW',
                   'TERMINAL_ID_RISK_30DAY_WINDOW']
 
+
 def init_weights(layer):
   if isinstance(layer, torch.nn.Linear):
     torch.nn.init.xavier_uniform_(layer.weight)
@@ -115,7 +116,6 @@ def eval_model(model, loader):
 
 
 def main(args):
-
   print("connecting to BigTable")
   if args.emulator_addr:
     os.environ["BIGTABLE_EMULATOR_HOST"] = args.emulator_addr
@@ -127,19 +127,16 @@ def main(args):
   print("creating train set")
   train_set = train_table.read_rows(torch.float32,
                                     ["cf1:" + column for column in
-                                      INPUT_FEATURES] + [
+                                     INPUT_FEATURES] + [
                                       "cf1:" + OUTPUT_FEATURE],
                                     pbt.row_set.from_rows_or_ranges(
                                       pbt.row_range.infinite()))
-  
-  test_set = test_table.read_rows(torch.float32,
-                                    ["cf1:" + column for column in
-                                      INPUT_FEATURES] + [
-                                      "cf1:" + OUTPUT_FEATURE],
-                                    pbt.row_set.from_rows_or_ranges(
-                                      pbt.row_range.infinite()))
-  
 
+  test_set = test_table.read_rows(torch.float32, ["cf1:" + column for column in
+                                                  INPUT_FEATURES] + [
+                                    "cf1:" + OUTPUT_FEATURE],
+                                  pbt.row_set.from_rows_or_ranges(
+                                    pbt.row_range.infinite()))
 
   print("creating a model")
   model = create_model()
@@ -164,27 +161,34 @@ def main(args):
 
 
 def parse_arguments():
-  parser = argparse.ArgumentParser("seed_bigtable.py")
+  parser = argparse.ArgumentParser("seed_bigtable.py",
+                                   description="Script training a simple "
+                                               "neural network using data "
+                                               "straight from bigtable. For "
+                                               "more information please "
+                                               "visit: "
+                                               "https://github.com/Unoperate/pytorch-cbt")
   parser.add_argument("-p", "--project_id",
                       help="google cloud bigtable project id", required=True)
   parser.add_argument("-i", "--instance_id",
                       help="google cloud bigtable instance id", required=True)
-  parser.add_argument("--train_set_table", help="google cloud bigtable table storing train_set",
+  parser.add_argument("--train_set_table",
+                      help="google cloud bigtable table storing train_set",
                       required=True)
-  parser.add_argument("--test_set_table", help="google cloud bigtable table storing test_set",
+  parser.add_argument("--test_set_table",
+                      help="google cloud bigtable table storing test_set",
                       required=True)
   parser.add_argument("-f", "--family",
                       help="column family that will be used for all the "
-                           "columns",
-                      required=True)
+                           "columns", required=True)
   parser.add_argument("-e", "--emulator_addr",
                       help="google cloud bigtable emulator address in format "
                            "ip:port")
 
   return parser.parse_args()
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
   args = parse_arguments()
 
   main(args)
