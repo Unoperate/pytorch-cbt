@@ -111,7 +111,7 @@ def read_data(path_to_repository: str,
 
 
 def train_test_split(transactions_df: pd.DataFrame, days_train: int = 150,
-                     delay: int = 15, days_test: int = 18):
+                     days_delay: int = 15, days_test: int = 18):
   """Function splitting the transactions into train and test datasets.
 
   We put the transactions in two sets, transactions taking place in the first
@@ -131,7 +131,7 @@ def train_test_split(transactions_df: pd.DataFrame, days_train: int = 150,
                                                                   minute=0,
                                                                   second=0)
   train_date_end = train_date_start + timedelta(days=days_train)
-  test_date_start = train_date_end + timedelta(days=delay)
+  test_date_start = train_date_end + timedelta(days=days_delay)
   test_date_end = test_date_start + timedelta(days=days_test)
 
   train_df = transactions_df[transactions_df['TX_DATETIME'] < train_date_end]
@@ -198,7 +198,7 @@ def main(args):
 
   transactions_df = read_data(temp_dir, end="2018-04-30")
   print("read", transactions_df.shape, 'transactions')
-  train_df, test_df = train_test_split(transactions_df, days_train=20, delay=5,
+  train_df, test_df = train_test_split(transactions_df, days_train=20, days_delay=5,
                                        days_test=5)
   print("train set", train_df.shape, "containing", train_df['TX_FRAUD'].sum(),
         "fraudulent transactions")
