@@ -37,6 +37,11 @@ import os
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "[PATH]"
 ```
 
+**Note**: If you're using the emulator, 
+remmember to set the `BIGTABLE_EMULATOR_HOST` environment variable
+as described [here](https://cloud.google.com/bigtable/docs/emulator).
+
+
 ## Quickstart
 
 First you need to create a client and a table you would like to read from.
@@ -46,21 +51,19 @@ import torch
 import pytorch_bigtable as pbt
 import random
 
-random.seed(10)
-
 # replace the project_id, instance_id and the name of the table with suitable values.
 client = pbt.BigtableClient(project_id="test-project", instance_id="test-instance")
 train_table = client.get_table("train")
 ```
 
 Now we will write some data into Bigtable. To do that, we create a
-tensor `ten`. We provide a list of column names in
+tensor `data_tensor`. We provide a list of column names in
 format `column_family:column_name` and a list of rowkeys.
 
 ```python
-ten = torch.Tensor(list(range(40))).reshape(20, 2)
+data_tensor = torch.Tensor(list(range(40))).reshape(20, 2)
 random_row_keys = ["row" + str(random.randint(0, 999)).rjust(3, "0") for _ in range(20)]
-train_table.write_tensor(ten, ["cf1:col1", "cf1:col2"], random_row_keys)
+train_table.write_tensor(data_tensor, ["cf1:col1", "cf1:col2"], random_row_keys)
 ```
 
 Great! Now we can create a pytorch dataset that will read the data from our
@@ -78,8 +81,7 @@ import pytorch_bigtable.row_range
 
 row_set = pbt.row_set.from_rows_or_ranges(pbt.row_range.infinite())
 
-train_dataset = train_table.read_rows(torch.float32, ["cf1:col1", "cf1:col2"],
-                                    row_set)
+train_dataset = train_table.read_rows(torch.float32, ["cf1:col1", "cf1:col2"], row_set)
 
 for tensor in train_dataset:
   print(tensor)
@@ -127,8 +129,7 @@ you can also create a row_set from an infinite range, empty range or a prefix.
 You can also intersect it with a row_range.
 
 ```python
-my_truncated_row_set = pbt.row_set.intersect(my_row_set,
-                                         pbt.row_range.right_open("row200", "row700"))
+my_truncated_row_set = pbt.row_set.intersect(my_row_set, pbt.row_range.right_open("row200", "row700"))
 ```
 
 ## Specifying a version of a value
@@ -146,10 +147,10 @@ objects or a number representing seconds or microseconds since epoch.
 
 ```python
 import pytorch_bigtable.version_filters as version_filters
-from datetime import datetime
+from datetime import datetime, timezone
 
-start = datetime(2020, 10, 10, 12, 0, 0)
-end = datetime(2100, 10, 10, 13, 0, 0)
+start = datetime(2020, 10, 10, 12, 0, 0, tzinfo=timezone.utc)
+end = datetime(2100, 10, 10, 13, 0, 0, tzinfo=timezone.utc)
 from_datetime = version_filters.timestamp_range(start, end)
 from_posix_timestamp = version_filters.timestamp_range(int(start.timestamp()), int(end.timestamp()))
 ```
@@ -181,7 +182,7 @@ def row_callback(tensor, index):
   return "row" + str(random.randint(1000, 9999)).rjust(4, "0")
 
 
-table.write_tensor(ten, ["cf1:col1", "cf1:col2"], row_callback)
+table.write_tensor(data_tensor, ["cf1:col1", "cf1:col2"], row_callback)
 ```
 
 ## Byte representation
@@ -213,7 +214,13 @@ as an argument as well.
 
 command to seed the database:
 ```bash
-python3 seed_bigtable.py --project_id test-project --instance_id test-instance --train_set_table train --test_set_table test -e "127.0.0.1:8086" -f cf1
+python3 seed_bigtable.py \
+  --project_id test-project \
+  --instance_id test-instance \
+  --train_set_table train \
+  --test_set_table test \
+  -e "127.0.0.1:8086" \
+  -f cf1
 ```
 
 ### fraud_example.py
@@ -228,5 +235,11 @@ is trained and evaluated again to verify that there was in fact some improvement
 
 command to run the example:
 ```bash
-python3 fraud_example.py  --project_id test-project --instance_id test-instance --train_set_table train --test_set_table test -e "127.0.0.1:8086" -f cf1
+python3 fraud_example.py  \
+--project_id test-project \
+--instance_id test-instance \
+--train_set_table train \
+--test_set_table test \
+-e "127.0.0.1:8086" \
+-f cf1
 ```
