@@ -65,8 +65,11 @@ class BuildExtCommand(cpp_extension.BuildExtension):
       for lib in INCLUDE_LIBS:
         if lib in line:
           lib_loc = line.split()[2]
-          shutil.copyfile(lib_loc,
-                          os.path.join(lib_dir, os.path.basename(lib_loc)))
+          try:
+            shutil.copyfile(lib_loc,
+                            os.path.join(lib_dir, os.path.basename(lib_loc)))
+          except shutil.SameFileError:
+            pass
 
 
 setup(name="pytorch_bigtable", version=version, author="Google",

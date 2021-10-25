@@ -26,7 +26,7 @@ do
   "$python_path/bin/python" setup.py bdist_wheel -d "$OUTPUT_DIR"
 done
 
-for wheel_file in "$OUTPUT_DIR/*"
+for wheel_file in "$OUTPUT_DIR/"*
 do
   mv "$wheel_file" "${wheel_file/linux/manylinux2014}"
 done
