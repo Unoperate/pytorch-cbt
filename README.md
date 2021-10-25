@@ -23,8 +23,22 @@ python setup.py develop
 To build the wheel we use the manylinux2014 dockerfile supplied by
 [manywheels](https://github.com/pypa/manylinux). 
 
+Our extension has dynamic dependencies to some libraries as well as to libraries 
+from pytorch. Normally this would be solved when running auditwheel, which would 
+take all dependencies and include them in our wheel. 
+
+This creates a problem because it includes pytorch libs which are loaded first
+when you import pytorch itself. Afterwards, when our extension is 
+loaded, all the dependencies would be loaded as well, including 
+pytorch libraries for the second time, which causes problems.
+
+What we do instead, is look for the 
+dynamic dependencies not from pytorch manually and then include them as part
+of our wheel. The code for that is already included in `setup.py`.
+
 To build the wheels, run docker image `centos7.Dockerfile` and execute
-the `plugin/build_wheels.sh` script.
+the `plugin/build_wheels.sh` script which will execute
+`python setup.py bdist_wheel` for each python version.
 
 ### Note on glibc++ ABI 
 
