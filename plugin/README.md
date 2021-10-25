@@ -13,6 +13,7 @@ This is a Pytorch Extension used to connect to Google Cloud Bigtable.
 * Writing to Bigtable
 * Building it locally
 * Byte representation
+* Example
 
 ## Installation
 
@@ -45,21 +46,21 @@ import torch
 import pytorch_bigtable as pbt
 import random
 
-client = pbt.BigtableClient(project_id="project-id", instance_id="instance-id")
+random.seed(10)
+
+# replace the project_id, instance_id and the name of the table with suitable values.
+client = pbt.BigtableClient(project_id="test-project", instance_id="test-instance")
 train_table = client.get_table("train")
 ```
 
-First we will write some data into Bigtable. To do that, we create a
+Now we will write some data into Bigtable. To do that, we create a
 tensor `ten`. We provide a list of column names in
 format `column_family:column_name` and a list of rowkeys.
 
 ```python
-import random
-
 ten = torch.Tensor(list(range(40))).reshape(20, 2)
-train_table.write_tensor(ten, ["fam1:col1", "fam2:col2"],
-                         ["row" + str(random.randint(0, 999)).rjust(3, "0") for
-                          _ in range(20)])
+random_row_keys = ["row" + str(random.randint(0, 999)).rjust(3, "0") for _ in range(20)]
+train_table.write_tensor(ten, ["cf1:col1", "cf1:col2"], random_row_keys)
 ```
 
 Great! Now we can create a pytorch dataset that will read the data from our
@@ -67,14 +68,20 @@ table. To do that, you have to provide the type of the data you wish to read,
 list of column names in format `column_family:column_name`, and a row_set that
 you would like to read.
 
+Keep in mind that that bigtable reads values in lexicographical order, 
+not the order they were put in. We gave them random row-keys 
+so they will be shuffled.
+
 ```python
 import pytorch_bigtable.row_set
 import pytorch_bigtable.row_range
 
 row_set = pbt.row_set.from_rows_or_ranges(pbt.row_range.infinite())
 
-for tensor in train_table.read_rows(torch.float32, ["fam1:col1", "fam2:col2"],
-                                    row_set):
+train_dataset = train_table.read_rows(torch.float32, ["cf1:col1", "cf1:col2"],
+                                    row_set)
+
+for tensor in train_dataset:
   print(tensor)
 ```
 
@@ -85,13 +92,19 @@ from Bigtable in example.py
 ## Parallel read
 
 Our dataset supports reading in parallel from Bigtable. To do that, create a
-pytorch DataLoader and set num_workers to a number higher than one. First a list
-of tablets will be fetched from bigquery, dividing the work into chunks. Then
-each worker will compute it's share of work and start reading from their
-tablets.
+pytorch DataLoader and set num_workers to a number higher than one. When a Bigtable table instance is created, a list of tablets is fetched from bigquery. When pytorch's dataloader spawns workers, each worker computes it's share of work based on the tablets in the table and starts reading from their share of
+tablets. 
+
+Batching is also supported. You have to set the batch_size when constructing the data_loader as you would normally do with any other dataset.
 
 **Note**: Keep in mind that when reading in parallel, the rows are not
-guaranteed to be read in order.
+guaranteed to be read in any particular order.
+
+```python
+train_loader = torch.utils.data.DataLoader(train_dataset, num_workers=5, batch_size=10)
+for tensor in train_loader:
+  print(tensor)
+```
 
 ## Reading specific row_keys
 
@@ -103,24 +116,19 @@ pytorch_bigtable.BigtableTable.read_rows method expects you to provide a
 row_set. You can construct a row_set from row_keys or row_ranges as follows:
 
 ```python
-import pytorch_bigtable.row_set as row_set
-import pytorch_bigtable.row_range as row_range
+row_range_below_300 = pbt.row_range.right_open("row000", "row300")
 
-row_range_ah = row_range.right_open("row-a", "row-h")
-
-my_row_set = row_set.from_rows_or_ranges(row_range_ah, "row-x", "row-y")
+my_row_set = pbt.row_set.from_rows_or_ranges(row_range_below_300, "row585", "row832")
 ```
 
-such row_set would contain a range of rows `[a, h)` and rows "row-x" and "row-y"
-.
+such row_set would contain a range of rows `[row000, row300)` and rows row585 and row832.
 
 you can also create a row_set from an infinite range, empty range or a prefix.
 You can also intersect it with a row_range.
 
 ```python
-my_row_set = row_set.from_rows_or_ranges(row_range.infinite)
-my_truncated_row_set = row_set.intersect(my_row_set,
-                                         row_range.right_open("row-a", "row-h"))
+my_truncated_row_set = pbt.row_set.intersect(my_row_set,
+                                         pbt.row_range.right_open("row200", "row700"))
 ```
 
 ## Specifying a version of a value
@@ -138,11 +146,12 @@ objects or a number representing seconds or microseconds since epoch.
 
 ```python
 import pytorch_bigtable.version_filters as version_filters
+from datetime import datetime
 
 start = datetime(2020, 10, 10, 12, 0, 0)
 end = datetime(2100, 10, 10, 13, 0, 0)
-version_filters.timestamp_range(start, end)
-version_filters.timestamp_range(int(start.timestamp()), int(end.timestamp()))
+from_datetime = version_filters.timestamp_range(start, end)
+from_posix_timestamp = version_filters.timestamp_range(int(start.timestamp()), int(end.timestamp()))
 ```
 
 ## Writing to Bigtable
@@ -172,7 +181,7 @@ def row_callback(tensor, index):
   return "row" + str(random.randint(1000, 9999)).rjust(4, "0")
 
 
-table.write_tensor(ten, ["fam1:col1", "fam2:col2"], row_callback)
+table.write_tensor(ten, ["cf1:col1", "cf1:col2"], row_callback)
 ```
 
 ## Byte representation
@@ -180,3 +189,44 @@ table.write_tensor(ten, ["fam1:col1", "fam2:col2"], row_callback)
 Because the byte representation of variables differ depending on the
 architecture of the machine the code is run on, we are using the xdr library to
 convert the values to bytes. XDR is a part of rpc library. 
+
+## Example
+
+We provide a simple end-to-end example consisting of two files: 
+`plugin/example/seed_bigtable.py` and `plugin/example/fraud_example.py`.
+
+### seed_bigtable.py
+It is used to generate credit-card transactions data as described in 
+[Fraud-Detection-Handbook](https://github.com/Fraud-Detection-Handbook/simulated-data).
+First some transactions are generated and stored in memory as a whole. Then they
+are split to two datasets - train and test and uploaded to Bigtable. 
+
+
+You have to specify the project and instance, the name of train and test table 
+as well as column family which should be used for all the columns as 
+script arguments. 
+
+
+If you wish to use the emulator, provide the emulator address and port 
+as an argument as well.
+
+
+command to seed the database:
+```bash
+python3 seed_bigtable.py --project_id test-project --instance_id test-instance --train_set_table train --test_set_table test -e "127.0.0.1:8086" -f cf1
+```
+
+### fraud_example.py
+It trains a simple fully-connected neural network for fraud detection based on
+data taken straight from bigtable. Keep in mind that the dataset is synthetic
+and the purpose of this example is to showcase the bigtable dataset and not
+fraud-detection algorithm.
+
+The network is first evaluated on the data from the `test` table, then the network
+is trained and evaluated again to verify that there was in fact some improvement.
+
+
+command to run the example:
+```bash
+python3 fraud_example.py  --project_id test-project --instance_id test-instance --train_set_table train --test_set_table test -e "127.0.0.1:8086" -f cf1
+```
