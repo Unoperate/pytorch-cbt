@@ -15,3 +15,7 @@
 """Connector for BigTable"""
 from .bigtable_dataset import *
 from . import pbt_C
+from . import row_range
+from . import row_set
+from . import version_filters
+

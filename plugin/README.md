@@ -92,9 +92,6 @@ not the order they were put in. We gave them random row-keys
 so they will be shuffled.
 
 ```python
-import pytorch_bigtable.row_set
-import pytorch_bigtable.row_range
-
 row_set = pbt.row_set.from_rows_or_ranges(pbt.row_range.infinite())
 
 train_dataset = train_table.read_rows(torch.float32, ["cf1:col1", "cf1:col2"], row_set)

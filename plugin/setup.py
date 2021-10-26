@@ -90,8 +90,16 @@ setup(name="pytorch_bigtable", version=version, author="Google",
       author_email="info@unoperate.com",
       description="Pytorch Extension for BigTable",
       long_description=long_description,
+      classifiers=[
+        "License :: OSI Approved :: Apache Software License",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+      ],
       url="https://github.com/Unoperate/pytorch-cbt",
-      install_requires=["torch>=1.9.0"], ext_modules=[
+      install_requires=["torch>=1.10.0"], ext_modules=[
     cpp_extension.CppExtension("pytorch_bigtable.pbt_C",
                                ["csrc/bigtable_dataset.cc"],
                                extra_compile_args=extra_compile_args,
