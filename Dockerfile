@@ -205,9 +205,7 @@ RUN curl -sSL \
 
 # PyTorch
 RUN pip3 install \
-      torch==1.9.0+cpu \
-      torchvision==0.10.0+cpu \
-      torchaudio==0.9.0 \
+      torch==1.10.0+cpu \
       -f https://download.pytorch.org/whl/torch_stable.html
 
 WORKDIR /opt/pytorch
