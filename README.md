@@ -51,18 +51,17 @@ need to manually include the relevant libraries, which is what we do in
 
 ### Note on glibc++ ABI 
 
-When C++11 was introduced,
-libstdc++ maintainers had to rewrite parts of the library. In order not to
-break binary compatibility with previously compiled programs, they decided
-that the C++11-conformant library implementation will be in an inline
-namespace (`__cxx11`), which means that symbols for that implementation are
-different (contain the `__cxx11` namespace name in them). They also allowed the
-users to change this behavior (i.e. break binary compatibility but link
-against symbols without `__cxx11` substring in them) if they set the flag
-`_GLIBCXX_USE_CXX11_ABI` to `0`. Ubuntu (and Fedora) compile libraries with
-this definition set to `1`. PyTorch, however, is compiled with it set to `0`,
-which means that our C++ Bigtable plugin and all its dependencies have to be
-compiled that way too.
+When C++11 was introduced, libstdc++ maintainers had to rewrite parts of the 
+library. In order not to break binary compatibility with previously compiled 
+programs, they decided that the C++11-conformant library implementation will 
+be in an inline namespace (`__cxx11`), which means that symbols for that 
+implementation are different (contain the `__cxx11` namespace name in them). 
+They also allowed the users to change this behavior (i.e. break binary 
+compatibility but link against symbols without `__cxx11` substring in them) 
+if they set the flag `_GLIBCXX_USE_CXX11_ABI` to `0`. Ubuntu (and Fedora) 
+compile libraries with this definition set to `1`. PyTorch, however, is 
+compiled with it set to `0`, which means that our C++ Bigtable plugin and all 
+its dependencies have to be compiled that way too. 
 
 In order to make it easy for the users, we compile the plugin and its
 dependecies statically. This is especially helpful given the
