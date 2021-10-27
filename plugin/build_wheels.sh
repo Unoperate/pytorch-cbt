@@ -22,7 +22,7 @@ OUTPUT_DIR=$ROOT_DIR/dist
 
 for python_path in $(find /opt/python -maxdepth 1 -name "cp3[6789]*")
 do
-  "$python_path/bin/pip" install torch==1.9.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+  "$python_path/bin/pip" install torch==1.10.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
   "$python_path/bin/python" setup.py bdist_wheel -d "$OUTPUT_DIR"
 done
 
