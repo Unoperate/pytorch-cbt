@@ -70,18 +70,10 @@ RUN /var/tmp/ci/install-cloud-sdk.sh
 ENV CLOUD_SDK_LOCATION=/usr/local/google-cloud-sdk
 ENV PATH=${CLOUD_SDK_LOCATION}/bin:${PATH}
 
-# pyTorch is compiled using the new libstdc++ ABI. When C++11 was introduced,
-# libstdc++ maintainers had to rewrite parts of the library. In order not to
-# break binary compatibility with previously compiled programs, they decided
-# that new, C++11-conformant library implementation will be in an inline
-# namespace (__cxx11), which means that symbols for that implementation are
-# different (contain the __cxx11 namespace name in them). They also allowed the
-# users to chnage this behavior (i.e. break binary compatibility but link
-# against symbols without __cxx11 substring in them) if they set the flag
-# `_GLIBCXX_USE_CXX11_ABI` to `0`. Ubuntu (and Fedora) compile libraries with
-# this definition set to `1`. pyTorch, however, is compiled with it set to `0`,
+# PyTorch is compiled with `_GLIBCXX_USE_CXX11_ABI` set to `0`,
 # which means that our C++ Bigtable plugin and all its dependencies have to be
-# compiled that way too.
+# compiled that way too. For more information please refer to the section
+# 'Note on glibc++ ABI' in README.md
 
 # In order to make it easy for the users, we compile the plugin and its
 # dependecies statically. This is especially helpful given the
@@ -211,7 +203,7 @@ RUN curl -sSL \
   cmake --install cmake-out --component google_cloud_cpp_development && \
   ldconfig
 
-# pyTorch
+# PyTorch
 RUN pip3 install \
       torch==1.9.0+cpu \
       torchvision==0.10.0+cpu \
