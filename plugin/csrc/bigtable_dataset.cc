@@ -29,7 +29,6 @@ namespace cbt = ::google::cloud::bigtable;
 
 namespace {
 
-
 int32_t BytesToInt32(std::string const& s) {
   int32_t v;
   XDR xdrs;
@@ -179,7 +178,7 @@ std::string GetTensorValueAsBytes(torch::Tensor const& tensor, size_t i,
     }
     case torch::kBool: {
       auto tensor_ptr = tensor.accessor<bool, 2>();
-      return BoolToBytes(tensor_ptr[i][j]);
+      return BoolToBytes(static_cast<bool_t>(tensor_ptr[i][j]));
     }
     default:
       throw std::runtime_error("type not implemented");
