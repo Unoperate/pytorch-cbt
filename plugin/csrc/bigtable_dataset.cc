@@ -178,7 +178,7 @@ std::string GetTensorValueAsBytes(torch::Tensor const& tensor, size_t i,
       return Int32ToBytes(tensor_ptr[i][j]);
     }
     case torch::kBool: {
-      auto tensor_ptr = tensor.accessor<bool_t, 2>();
+      auto tensor_ptr = tensor.accessor<bool, 2>();
       return BoolToBytes(tensor_ptr[i][j]);
     }
     default:
