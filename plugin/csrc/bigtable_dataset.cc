@@ -50,26 +50,14 @@ std::string Int32ToBytes(int32_t v) {
   return s;
 }
 
-bool_t BytesToBool(std::string const& s) {
-  bool_t v;
-  XDR xdrs;
-  xdrmem_create(&xdrs, const_cast<char*>(s.data()), sizeof(v), XDR_DECODE);
-  if (!xdr_bool(&xdrs, &v)) {
+bool BytesToBool(std::string const& s) {
+  if (s.size() != 1U) {
     throw std::runtime_error("Error reading bool from byte array.");
   }
-  return v;
+  return (*s.data()) != 0;
 }
 
-std::string BoolToBytes(bool_t v) {
-  char buffer[sizeof(v)];
-  XDR xdrs;
-  xdrmem_create(&xdrs, buffer, sizeof(v), XDR_ENCODE);
-  if (!xdr_bool(&xdrs, &v)) {
-    throw std::runtime_error("Error writing bool to byte array.");
-  }
-  std::string s(buffer, sizeof(v));
-  return s;
-}
+std::string BoolToBytes(bool v) { return std::string(v ? "\xff" : "\x00", 1); }
 
 std::string FloatToBytes(float v) {
   char buffer[sizeof(v)];
@@ -153,7 +141,8 @@ void PutCellValueInTensor(torch::Tensor* tensor, int index,
       tensor->index_put_({index}, BytesToBool(cell.value()));
       break;
     default:
-      throw std::runtime_error("type not implemented");
+      throw std::runtime_error(
+          "Cannot put value in tensor. Type not implemented");
   }
 }
 
@@ -181,7 +170,7 @@ std::string GetTensorValueAsBytes(torch::Tensor const& tensor, size_t i,
       return BoolToBytes(static_cast<bool_t>(tensor_ptr[i][j]));
     }
     default:
-      throw std::runtime_error("type not implemented");
+      throw std::runtime_error("Cannot get tensor value. Type not implemented");
   }
 }
 
@@ -301,8 +290,18 @@ torch::Tensor getFilledTensor(size_t size, torch::Dtype const& cell_type,
                  ? torch::full(size, (*default_value).cast<int64_t>(),
                                torch::TensorOptions().dtype(cell_type))
                  : torch::zeros(size, torch::TensorOptions().dtype(cell_type));
+    case torch::kI32:
+      return default_value
+                 ? torch::full(size, (*default_value).cast<int32_t>(),
+                               torch::TensorOptions().dtype(cell_type))
+                 : torch::zeros(size, torch::TensorOptions().dtype(cell_type));
+    case torch::kBool:
+      return default_value
+                 ? torch::full(size, (*default_value).cast<bool>(),
+                               torch::TensorOptions().dtype(cell_type))
+                 : torch::zeros(size, torch::TensorOptions().dtype(cell_type));
     default:
-      throw std::runtime_error("type not implemented");
+      throw std::runtime_error("Cannot construct tensor. Type not implemented");
   }
 }
 
