@@ -167,7 +167,7 @@ std::string GetTensorValueAsBytes(torch::Tensor const& tensor, size_t i,
     }
     case torch::kBool: {
       auto tensor_ptr = tensor.accessor<bool, 2>();
-      return BoolToBytes(static_cast<bool_t>(tensor_ptr[i][j]));
+      return BoolToBytes(tensor_ptr[i][j]);
     }
     default:
       throw std::runtime_error("Cannot get tensor value. Type not implemented");
