@@ -28,20 +28,26 @@ from google.auth.credentials import AnonymousCredentials
 from google.cloud.bigtable import Client
 
 
-def check_values(test_case, values, table, type_name, dtype):
-  for i, r in enumerate(table.read_rows(dtype, ["fam1:" + type_name],
-    row_set=row_set.from_rows_or_ranges(row_range.infinite()), )):
-    test_case.assertEqual(values[i].item(), r[0].item())
-
-
-def write_and_check_values(test_case, values, table, type_name, dtype):
-  table.write_tensor(values.reshape(-1, 1),
-    ["fam1:" + type_name + "_serialized"], test_case.data["row_keys"], )
-
-  check_values(test_case, values, table, type_name + "_serialized", dtype)
 
 
 class BigtableSerializationTest(unittest.TestCase):
+
+
+  def check_values(self, values, table, type_name, dtype):
+    for i, r in enumerate(table.read_rows(dtype, ["fam1:" + type_name],
+      row_set=row_set.from_rows_or_ranges(row_range.infinite()), )):
+      if dtype in [torch.float64, torch.float32]:
+        self.assertAlmostEqual(values[i].item(), r[0].item())
+      else:
+        self.assertEqual(values[i].item(), r[0].item())
+
+
+  def write_and_check_values(self, values, table, type_name, dtype):
+    table.write_tensor(values.reshape(-1, 1),
+      ["fam1:" + type_name + "_serialized"], self.data["row_keys"], )
+
+    self.check_values(values, table, type_name + "_serialized", dtype)
+
   def setUp(self):
     self.emulator = BigtableEmulator()
     self.data = {"values": [i * 10 / 7 for i in range(10)],
@@ -95,7 +101,7 @@ class BigtableSerializationTest(unittest.TestCase):
     client = BigtableClient("fake_project", "fake_instance")
     table = client.get_table("test-table")
 
-    check_values(self, values, table, "float", torch.float32)
+    self.check_values(values, table, "float", torch.float32)
 
   def test_read_double(self):
     values = torch.DoubleTensor(self.data["values"]).type(torch.float64)
@@ -103,7 +109,7 @@ class BigtableSerializationTest(unittest.TestCase):
     client = BigtableClient("fake_project", "fake_instance")
     table = client.get_table("test-table")
 
-    check_values(self, values, table, "double", torch.float64)
+    self.check_values(values, table, "double", torch.float64)
 
   def test_read_int64(self):
     values = torch.DoubleTensor(self.data["values"]).type(torch.int64)
@@ -111,7 +117,7 @@ class BigtableSerializationTest(unittest.TestCase):
     client = BigtableClient("fake_project", "fake_instance")
     table = client.get_table("test-table")
 
-    check_values(self, values, table, "int64", torch.int64)
+    self.check_values(values, table, "int64", torch.int64)
 
   def test_read_int32(self):
     values = torch.DoubleTensor(self.data["values"]).type(torch.int32)
@@ -119,7 +125,7 @@ class BigtableSerializationTest(unittest.TestCase):
     client = BigtableClient("fake_project", "fake_instance")
     table = client.get_table("test-table")
 
-    check_values(self, values, table, "int32", torch.int32)
+    self.check_values(values, table, "int32", torch.int32)
 
   def test_read_bool(self):
     values = torch.DoubleTensor(self.data["values"]).type(torch.bool)
@@ -127,7 +133,7 @@ class BigtableSerializationTest(unittest.TestCase):
     client = BigtableClient("fake_project", "fake_instance")
     table = client.get_table("test-table")
 
-    check_values(self, values, table, "bool", torch.bool)
+    self.check_values(values, table, "bool", torch.bool)
 
   def test_write_float(self):
     values = torch.DoubleTensor(self.data["values"]).type(torch.float32)
@@ -135,7 +141,7 @@ class BigtableSerializationTest(unittest.TestCase):
     client = BigtableClient("fake_project", "fake_instance")
     table = client.get_table("test-table")
 
-    write_and_check_values(self, values, table, "float", torch.float32)
+    self.write_and_check_values(values, table, "float", torch.float32)
 
   def test_write_double(self):
     values = torch.DoubleTensor(self.data["values"]).type(torch.float64)
@@ -143,7 +149,7 @@ class BigtableSerializationTest(unittest.TestCase):
     client = BigtableClient("fake_project", "fake_instance")
     table = client.get_table("test-table")
 
-    write_and_check_values(self, values, table, "double", torch.float64)
+    self.write_and_check_values(values, table, "double", torch.float64)
 
   def test_write_int64(self):
     values = torch.DoubleTensor(self.data["values"]).type(torch.int64)
@@ -151,7 +157,7 @@ class BigtableSerializationTest(unittest.TestCase):
     client = BigtableClient("fake_project", "fake_instance")
     table = client.get_table("test-table")
 
-    write_and_check_values(self, values, table, "int64", torch.int64)
+    self.write_and_check_values(values, table, "int64", torch.int64)
 
   def test_write_int32(self):
     values = torch.DoubleTensor(self.data["values"]).type(torch.int32)
@@ -159,7 +165,7 @@ class BigtableSerializationTest(unittest.TestCase):
     client = BigtableClient("fake_project", "fake_instance")
     table = client.get_table("test-table")
 
-    write_and_check_values(self, values, table, "int32", torch.int32)
+    self.write_and_check_values(values, table, "int32", torch.int32)
 
   def test_write_bool(self):
     values = torch.DoubleTensor(self.data["values"]).type(torch.bool)
@@ -167,4 +173,4 @@ class BigtableSerializationTest(unittest.TestCase):
     client = BigtableClient("fake_project", "fake_instance")
     table = client.get_table("test-table")
 
-    write_and_check_values(self, values, table, "bool", torch.bool)
+    self.write_and_check_values(values, table, "bool", torch.bool)
