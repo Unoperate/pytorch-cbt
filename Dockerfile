@@ -60,7 +60,7 @@ RUN apt-get update && \
 
 # Install Python packages
 RUN update-alternatives --install /usr/bin/python python $(which python3) 10
-RUN pip3 install setuptools wheel pylint
+RUN pip3 install setuptools wheel pylint google-cloud-bigtable
 
 # Install the Cloud SDK and some of the emulators. We use the emulators to run
 # integration tests.

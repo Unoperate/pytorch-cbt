@@ -29,6 +29,36 @@ namespace cbt = ::google::cloud::bigtable;
 
 namespace {
 
+int32_t BytesToInt32(std::string const& s) {
+  int32_t v;
+  XDR xdrs;
+  xdrmem_create(&xdrs, const_cast<char*>(s.data()), sizeof(v), XDR_DECODE);
+  if (!xdr_int32_t(&xdrs, &v)) {
+    throw std::runtime_error("Error reading int32 from byte array.");
+  }
+  return v;
+}
+
+std::string Int32ToBytes(int32_t v) {
+  char buffer[sizeof(v)];
+  XDR xdrs;
+  xdrmem_create(&xdrs, buffer, sizeof(v), XDR_ENCODE);
+  if (!xdr_int32_t(&xdrs, &v)) {
+    throw std::runtime_error("Error writing int32 to byte array.");
+  }
+  std::string s(buffer, sizeof(v));
+  return s;
+}
+
+bool BytesToBool(std::string const& s) {
+  if (s.size() != 1U) {
+    throw std::runtime_error("Error reading bool from byte array.");
+  }
+  return (*s.data()) != 0;
+}
+
+std::string BoolToBytes(bool v) { return std::string(v ? "\xff" : "\x00", 1); }
+
 std::string FloatToBytes(float v) {
   char buffer[sizeof(v)];
   XDR xdrs;
@@ -104,8 +134,15 @@ void PutCellValueInTensor(torch::Tensor* tensor, int index,
     case torch::kI64:
       tensor->index_put_({index}, BytesToInt64(cell.value()));
       break;
+    case torch::kI32:
+      tensor->index_put_({index}, BytesToInt32(cell.value()));
+      break;
+    case torch::kBool:
+      tensor->index_put_({index}, BytesToBool(cell.value()));
+      break;
     default:
-      throw std::runtime_error("type not implemented");
+      throw std::runtime_error(
+          "Cannot put value in tensor. Type not implemented");
   }
 }
 
@@ -124,8 +161,16 @@ std::string GetTensorValueAsBytes(torch::Tensor const& tensor, size_t i,
       auto tensor_ptr = tensor.accessor<int64_t, 2>();
       return Int64ToBytes(tensor_ptr[i][j]);
     }
+    case torch::kInt32: {
+      auto tensor_ptr = tensor.accessor<int32_t, 2>();
+      return Int32ToBytes(tensor_ptr[i][j]);
+    }
+    case torch::kBool: {
+      auto tensor_ptr = tensor.accessor<bool, 2>();
+      return BoolToBytes(tensor_ptr[i][j]);
+    }
     default:
-      throw std::runtime_error("type not implemented");
+      throw std::runtime_error("Cannot get tensor value. Type not implemented");
   }
 }
 
@@ -245,8 +290,18 @@ torch::Tensor getFilledTensor(size_t size, torch::Dtype const& cell_type,
                  ? torch::full(size, (*default_value).cast<int64_t>(),
                                torch::TensorOptions().dtype(cell_type))
                  : torch::zeros(size, torch::TensorOptions().dtype(cell_type));
+    case torch::kI32:
+      return default_value
+                 ? torch::full(size, (*default_value).cast<int32_t>(),
+                               torch::TensorOptions().dtype(cell_type))
+                 : torch::zeros(size, torch::TensorOptions().dtype(cell_type));
+    case torch::kBool:
+      return default_value
+                 ? torch::full(size, (*default_value).cast<bool>(),
+                               torch::TensorOptions().dtype(cell_type))
+                 : torch::zeros(size, torch::TensorOptions().dtype(cell_type));
     default:
-      throw std::runtime_error("type not implemented");
+      throw std::runtime_error("Cannot construct tensor. Type not implemented");
   }
 }
 
