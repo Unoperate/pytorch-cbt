@@ -90,6 +90,7 @@ setup(name="pytorch_bigtable", version=version, author="Google",
       author_email="info@unoperate.com",
       description="Pytorch Extension for BigTable",
       long_description=long_description,
+      long_description_content_type='text/markdown',
       classifiers=[
         "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3.6",
